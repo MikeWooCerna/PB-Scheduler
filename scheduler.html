@@ -1641,13 +1641,25 @@ function doSave(){
 }
 
 /* ── MAIN DATA LOAD ── */
+function fetchMasterlistCsv(){
+  return fetch(_pbApi('?action=masterlist'))
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.status==='error'&&res.message==='Unauthorized'){
+        _pbClearAuth();
+        _pbShowLogin('Your session expired. Please sign in again.');
+        throw new Error('Unauthorized');
+      }
+      if(res.status==='ok'&&typeof res.csv==='string')return res.csv;
+      throw new Error((res&&res.message)||'Masterlist fetch failed');
+    });
+}
 function loadData(){
   var ls=document.getElementById('loading-screen');
   var ld=document.getElementById('loading-detail');
   buildWeeks();
   if(ld)ld.textContent='Fetching staff from Masterlist...';
-  fetch(MASTERLIST_CSV_URL)
-    .then(function(r){if(!r.ok)throw new Error('CSV fetch failed');return r.text();})
+  fetchMasterlistCsv()
     .then(function(csv){
       buildStaffFromCSV(csv);
       if(ld)ld.textContent='Loading saved schedules...';

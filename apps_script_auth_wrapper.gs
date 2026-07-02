@@ -8,6 +8,8 @@
  * 3. Set Script Properties:
  *    USERS_JSON  = {"admin":"<password>","mike":"<password>","gonrejas":"<password>"}
  *    AUTH_SECRET = any long random string
+ *    MASTERLIST_SPREADSHEET_ID = 1xaogAOXwKXimTTyG1wV5Pf45MlkMI2icukuXZjODVs4
+ *    MASTERLIST_GID = 2063747528
  * 4. Deploy a new web app version using the same access mode.
  */
 
@@ -24,6 +26,10 @@ function doGet(e) {
       status: 'error',
       message: 'Unauthorized'
     });
+  }
+
+  if (action === 'masterlist') {
+    return schedulerMasterlist_(e);
   }
 
   return schedulerDataGet_(e);
@@ -104,4 +110,42 @@ function schedulerJson_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function schedulerMasterlist_(e) {
+  var props = PropertiesService.getScriptProperties();
+  var spreadsheetId = props.getProperty('MASTERLIST_SPREADSHEET_ID') || '1xaogAOXwKXimTTyG1wV5Pf45MlkMI2icukuXZjODVs4';
+  var gid = Number(props.getProperty('MASTERLIST_GID') || '2063747528');
+  var ss = SpreadsheetApp.openById(spreadsheetId);
+  var sheets = ss.getSheets();
+  var sheet = null;
+
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].getSheetId() === gid) {
+      sheet = sheets[i];
+      break;
+    }
+  }
+
+  if (!sheet) {
+    throw new Error('Masterlist sheet gid not found: ' + gid);
+  }
+
+  var values = sheet.getDataRange().getDisplayValues();
+  var csv = values.map(function(row) {
+    return row.map(schedulerCsvCell_).join(',');
+  }).join('\r\n');
+
+  return schedulerJson_({
+    status: 'ok',
+    csv: csv
+  });
+}
+
+function schedulerCsvCell_(value) {
+  value = String(value == null ? '' : value);
+  if (/[",\r\n]/.test(value)) {
+    value = '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
 }
