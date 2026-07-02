@@ -8,8 +8,8 @@
  * 3. Set Script Properties:
  *    USERS_JSON  = {"admin":"<password>","mike":"<password>","gonrejas":"<password>"}
  *    AUTH_SECRET = any long random string
- *    MASTERLIST_SPREADSHEET_ID = 1xaogAOXwKXimTTyG1wV5Pf45MlkMI2icukuXZjODVs4
- *    MASTERLIST_GID = 2063747528
+ *    MASTERLIST_SPREADSHEET_ID = 18hKmm2SmlWqB23osiV3JTF0aWn86vvZ-YJSC-Rr3JcY
+ *    MASTERLIST_GID = 0
  * 4. Deploy a new web app version using the same access mode.
  */
 
@@ -114,8 +114,8 @@ function schedulerJson_(obj) {
 
 function schedulerMasterlist_(e) {
   var props = PropertiesService.getScriptProperties();
-  var spreadsheetId = props.getProperty('MASTERLIST_SPREADSHEET_ID') || '1xaogAOXwKXimTTyG1wV5Pf45MlkMI2icukuXZjODVs4';
-  var gid = Number(props.getProperty('MASTERLIST_GID') || '2063747528');
+  var spreadsheetId = props.getProperty('MASTERLIST_SPREADSHEET_ID') || '18hKmm2SmlWqB23osiV3JTF0aWn86vvZ-YJSC-Rr3JcY';
+  var gid = Number(props.getProperty('MASTERLIST_GID') || '0');
   var ss = SpreadsheetApp.openById(spreadsheetId);
   var sheets = ss.getSheets();
   var sheet = null;
