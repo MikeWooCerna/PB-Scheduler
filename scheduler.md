@@ -1,8 +1,8 @@
 # Pac-Biz Ops Scheduler
 
 **File:** `scheduler.html`
-**Type:** Single-file HTML/CSS/JS web application — no server, no install, no build step
-**Hosted at:** Open locally in any browser, or serve via any static file host
+**Type:** Static HTML/CSS/JS frontend backed by Google Apps Script
+**Hosted at:** GitHub Pages or local browser
 
 ---
 
@@ -21,15 +21,14 @@ This is an internal weekly staff scheduling tool for Pac-Biz Operations. It load
 
 **You do not need to install anything.** No Node.js, no Python, no server.
 
-### Provisioning note (2026-07-02)
+### Provisioning note (2026-07-03)
 
-**`scheduler-config.js` is a REQUIRED sibling file.** It is not committed to git (git-ignored)
-and will NOT travel with `scheduler.html`. Any fresh copy of Scheduler on a new machine or host
-must have `scheduler-config.js` manually provisioned alongside `scheduler.html`, or `doLogin()`,
-the Masterlist CSV fetch, and the Scheduler API fetch will all throw `ReferenceError` with no
-user-facing message.
+The deployed GitHub Pages app uses committed `scheduler-public-config.js` for browser-required
+endpoints. User credentials are not committed; they live in Apps Script Script Properties and
+are checked through `apps_script_auth_wrapper.gs`.
 
-See the **Credential-Extraction Refactor** changelog entry below for details.
+Local-only development may still use `scheduler-config.js`, but deployed login does not depend
+on that gitignored file.
 
 ---
 
@@ -57,15 +56,15 @@ See the **Credential-Extraction Refactor** changelog entry below for details.
 
 | Constant | Location | Purpose |
 |----------|----------|---------|
-| `MASTERLIST_CSV_URL` | `scheduler-config.js` (line 2) | Masterlist staff roster (gid=0) |
-| `SCHEDULER_API_URL` | `scheduler-config.js` (line 3) | Apps Script web app — reads/writes schedule data |
-| `USERS` | `scheduler-config.js` (line 4) | Auth credential map (username → password) |
+| `MASTERLIST_CSV_URL` | `scheduler-public-config.js` | Masterlist staff roster (gid=0) |
+| `SCHEDULER_API_URL` | `scheduler-public-config.js` | Apps Script web app — auth + schedule API |
+| `USERS_JSON` | Apps Script Script Properties | Auth credential map (username → password) |
 | `IDLE_MS` | `scheduler.html` (line 866) | Inactivity logout threshold (currently 3 min) |
 
 **URL sync note:** `MASTERLIST_CSV_URL` shares the same base sheet as
 `MASTERLIST_CSV` / `HISTORY_CSV` / `MOVEMENT_CSV` in
 `../Masterlist/sheets_urls.py`. When the Masterlist sheet is re-published,
-update `_BASE` in `sheets_urls.py` AND the URL value in `scheduler-config.js` (line 2).
+update `_BASE` in `sheets_urls.py` AND the URL value in `scheduler-public-config.js`.
 
 ---
 
@@ -74,23 +73,26 @@ update `_BASE` in `sheets_urls.py` AND the URL value in `scheduler-config.js` (l
 Auth state is stored in two layers to survive page refresh and Edge's
 privacy/tracking-prevention clearing of `localStorage`:
 
-1. **`localStorage` key `pb_auth`** — primary; written on login
+1. **`localStorage` key `pb_auth`** — username; written on login
+2. **`localStorage` key `pb_auth_token`** — signed backend session token
 2. **Cookie `pbs=`** — fallback; 1-year max-age, SameSite=Lax, path=/
 
 Both layers are checked on every page load by an inline IIFE (line 633)
 that runs before the main script block. If neither is present, the login screen
 is shown. Login writes both; logout clears both.
 
-**Helpers (lines 824–826 in scheduler.html):**
+**Helpers (near line 824 in scheduler.html):**
 - `_pbGetAuth()` — returns auth value from localStorage, falls back to cookie
-- `_pbSaveAuth(u)` — writes both localStorage and cookie
+- `_pbGetAuthToken()` — returns the signed backend session token
+- `_pbSaveAuth(u, t)` — writes username, token, and cookie
 - `_pbClearAuth()` — removes both
 
 **Auth on-load IIFE (lines 827–836):**
 Checks the stored auth on page load and either hides the login screen or prompts for credentials.
 
-**Login validation (line 841):**
-`doLogin()` compares user input against the `USERS` map from `scheduler-config.js`.
+**Login validation:**
+`doLogin()` calls `SCHEDULER_API_URL?action=login`. Apps Script validates against
+`USERS_JSON` Script Property and returns a signed token.
 
 **Inactivity logout:** `IDLE_MS = 3 * 60 * 1000` (3 minutes, as of 2026-07-01).
 `_startIdleTimer()` resets on any `mousemove`, `keydown`, `click`, `scroll`, `touchstart`, `mousedown`.
@@ -570,6 +572,37 @@ scheduler-config.js
 **Security note (reviewer caveat):** Moving secrets to client-side JavaScript does not hide them from end users viewing DevTools — anyone can open the browser console and see `USERS` and the URLs in memory. This refactor addresses **git-history exposure only**. It is **not** a security boundary for the deployed app. A true backend service would be needed to keep secrets away from clients, but that is beyond the scope of this local scheduling tool.
 
 **Future multi-environment support:** The `*.local.js` pattern in `.gitignore` enables local environment overrides (e.g. `scheduler-config.local.js`) for development without git conflicts. Not currently used.
+
+---
+
+### 2026-07-03 — Backend Auth Migration
+
+**Status:** Frontend wired; Apps Script wrapper added
+
+#### Summary
+
+The deployed GitHub Pages app no longer depends on gitignored `scheduler-config.js`
+for login. `scheduler.html` now loads `scheduler-public-config.js`, which contains
+only public runtime endpoints. User/password validation is moved to Apps Script via
+`apps_script_auth_wrapper.gs`.
+
+#### Deployment Required
+
+In the existing Scheduler Apps Script project:
+
+1. Rename the current `doGet(e)` function to `schedulerDataGet_(e)`.
+2. Paste in `apps_script_auth_wrapper.gs`.
+3. Set Script Properties:
+   - `USERS_JSON`
+   - `AUTH_SECRET`
+4. Deploy a new web app version.
+
+#### Client Behavior
+
+- `doLogin()` calls `SCHEDULER_API_URL?action=login`.
+- On success, the backend returns a signed session token.
+- Schedule load/save requests include the token.
+- Passwords are no longer present in GitHub Pages files.
 
 ---
 

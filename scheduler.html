@@ -818,15 +818,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--page);color:va
 
 <div class="toast" id="toast"></div>
 
-<script src="scheduler-config.js"></script>
+<script src="scheduler-public-config.js"></script>
 <script>
 // ── AUTH ──
 function _pbGetAuth(){var ss=sessionStorage.getItem('pb_auth');if(ss)return ss;var ls=localStorage.getItem('pb_auth');if(ls)return ls;var m=document.cookie.match('(?:^|;)\\s*pbs=([^;]+)');return m?decodeURIComponent(m[1]):null;}
-function _pbSaveAuth(u){sessionStorage.setItem('pb_auth',u);localStorage.setItem('pb_auth',u);document.cookie='pbs='+encodeURIComponent(u)+';max-age='+(365*86400)+';path=/;SameSite=Lax';}
-function _pbClearAuth(){sessionStorage.removeItem('pb_auth');localStorage.removeItem('pb_auth');document.cookie='pbs=;max-age=0;path=/;SameSite=Lax';}
+function _pbGetAuthToken(){var ss=sessionStorage.getItem('pb_auth_token');if(ss)return ss;return localStorage.getItem('pb_auth_token')||'';}
+function _pbSaveAuth(u,t){sessionStorage.setItem('pb_auth',u);localStorage.setItem('pb_auth',u);sessionStorage.setItem('pb_auth_token',t);localStorage.setItem('pb_auth_token',t);document.cookie='pbs='+encodeURIComponent(u)+';max-age='+(365*86400)+';path=/;SameSite=Lax';}
+function _pbClearAuth(){sessionStorage.removeItem('pb_auth');localStorage.removeItem('pb_auth');sessionStorage.removeItem('pb_auth_token');localStorage.removeItem('pb_auth_token');document.cookie='pbs=;max-age=0;path=/;SameSite=Lax';}
+function _pbApi(params){var sep=params&&params.indexOf('?')===0?'&':'?';return SCHEDULER_API_URL+(params||'')+sep+'token='+encodeURIComponent(_pbGetAuthToken());}
 (function(){
   var u=_pbGetAuth();
-  if(u){
+  if(u&&_pbGetAuthToken()){
     document.getElementById('login-scr').style.display='none';
     _setTopbarUser(u);
     _startIdleTimer();
@@ -834,18 +836,32 @@ function _pbClearAuth(){sessionStorage.removeItem('pb_auth');localStorage.remove
     setTimeout(function(){var i=document.getElementById('lg-user');if(i)i.focus();},80);
   }
 })();
-function doLogin(){
+async function doLogin(){
   var u=document.getElementById('lg-user').value.trim().toLowerCase();
   var p=document.getElementById('lg-pass').value;
   var err=document.getElementById('lg-err');
-  if(USERS[u]&&USERS[u]===p){
-    _pbSaveAuth(u);
-    document.getElementById('login-scr').style.display='none';
-    err.textContent='';
-    _setTopbarUser(u);
-    _startIdleTimer();
-  } else {
-    err.textContent='Incorrect username or password.';
+  err.textContent='';
+  if(!window.SCHEDULER_API_URL){
+    err.textContent='Scheduler backend is not configured.';
+    return;
+  }
+  try{
+    var url=SCHEDULER_API_URL+'?action=login&username='+encodeURIComponent(u)+'&password='+encodeURIComponent(p);
+    var res=await fetch(url).then(function(r){return r.json();});
+    if(res&&res.status==='ok'&&res.token){
+      _pbSaveAuth(u,res.token);
+      document.getElementById('login-scr').style.display='none';
+      err.textContent='';
+      _setTopbarUser(u);
+      _startIdleTimer();
+    } else {
+      err.textContent=(res&&res.message)||'Incorrect username or password.';
+      document.getElementById('lg-pass').value='';
+      setTimeout(function(){document.getElementById('lg-pass').focus();},0);
+    }
+  }catch(ex){
+    console.warn('Login error:',ex);
+    err.textContent='Could not reach scheduler login service.';
     document.getElementById('lg-pass').value='';
     setTimeout(function(){document.getElementById('lg-pass').focus();},0);
   }
@@ -876,7 +892,7 @@ var ACCT_CLR={};
 var ALL_ACCTS=[];
 var ALL_SUPERVISORS=[];
 // ⚠ Masterlist CSV URL — keep in sync with sheets_urls.py (_BASE, gid=0)
-// MASTERLIST_CSV_URL and SCHEDULER_API_URL now defined in scheduler-config.js (git-ignored)
+// MASTERLIST_CSV_URL and SCHEDULER_API_URL are defined in scheduler-public-config.js.
 
 var WEEKS=[];
 var curWeekIdx=2;
@@ -1604,7 +1620,7 @@ function doSave(){
     var shifts=sch[k]&&sch[k][id]?sch[k][id]:{};
     var params='?action=save&empId='+encodeURIComponent(id)+'&weekKey='+encodeURIComponent(k);
     DAYS.forEach(function(d){params+='&'+d+'='+encodeURIComponent(JSON.stringify(shifts[d]||off()));});
-    fetch(SCHEDULER_API_URL+params)
+    fetch(_pbApi(params))
       .then(function(r){return r.json();})
       .then(function(res){done(res.status==='ok');})
       .catch(function(){done(false);});
@@ -1622,7 +1638,7 @@ function loadData(){
     .then(function(csv){
       buildStaffFromCSV(csv);
       if(ld)ld.textContent='Loading saved schedules...';
-      return fetch(SCHEDULER_API_URL);
+      return fetch(_pbApi('?action=load'));
     })
     .then(function(r){return r.json();})
     .then(function(res){
