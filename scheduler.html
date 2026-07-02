@@ -826,16 +826,26 @@ function _pbGetAuthToken(){var ss=sessionStorage.getItem('pb_auth_token');if(ss)
 function _pbSaveAuth(u,t){sessionStorage.setItem('pb_auth',u);localStorage.setItem('pb_auth',u);sessionStorage.setItem('pb_auth_token',t);localStorage.setItem('pb_auth_token',t);document.cookie='pbs='+encodeURIComponent(u)+';max-age='+(365*86400)+';path=/;SameSite=Lax';}
 function _pbClearAuth(){sessionStorage.removeItem('pb_auth');localStorage.removeItem('pb_auth');sessionStorage.removeItem('pb_auth_token');localStorage.removeItem('pb_auth_token');document.cookie='pbs=;max-age=0;path=/;SameSite=Lax';}
 function _pbApi(params){var sep=params&&params.indexOf('?')===0?'&':'?';return SCHEDULER_API_URL+(params||'')+sep+'token='+encodeURIComponent(_pbGetAuthToken());}
-(function(){
+var _pbDataLoaded=false;
+function _pbShowLogin(message){
+  var ls=document.getElementById('loading-screen');
+  var err=document.getElementById('lg-err');
+  if(ls)ls.style.display='none';
+  if(message&&err)err.textContent=message;
+  document.getElementById('login-scr').style.display='flex';
+  setTimeout(function(){var i=document.getElementById('lg-user');if(i)i.focus();},80);
+}
+function _pbStartApp(){
   var u=_pbGetAuth();
   if(u&&_pbGetAuthToken()){
     document.getElementById('login-scr').style.display='none';
     _setTopbarUser(u);
     _startIdleTimer();
+    if(!_pbDataLoaded)loadData();
   } else {
-    setTimeout(function(){var i=document.getElementById('lg-user');if(i)i.focus();},80);
+    _pbShowLogin();
   }
-})();
+}
 async function doLogin(){
   var u=document.getElementById('lg-user').value.trim().toLowerCase();
   var p=document.getElementById('lg-pass').value;
@@ -854,6 +864,7 @@ async function doLogin(){
       err.textContent='';
       _setTopbarUser(u);
       _startIdleTimer();
+      if(!_pbDataLoaded)loadData();
     } else {
       err.textContent=(res&&res.message)||'Incorrect username or password.';
       document.getElementById('lg-pass').value='';
@@ -1642,15 +1653,23 @@ function loadData(){
     })
     .then(function(r){return r.json();})
     .then(function(res){
+      if(res.status==='error'&&res.message==='Unauthorized'){
+        _pbClearAuth();
+        _pbShowLogin('Your session expired. Please sign in again.');
+        throw new Error('Unauthorized');
+      }
       if(res.status==='ok')mergeScheduleData(res.data);
       ensureWeek(curWK());
     })
     .catch(function(err){
       console.warn('Load error:',err);
-      if(ld)ld.textContent='Could not connect — using empty schedule.';
+      if(String(err&&err.message)==='Unauthorized')return;
+      if(ld)ld.textContent='Could not connect - using empty schedule.';
       ensureWeek(curWK());
     })
     .then(function(){
+      if(!_pbGetAuthToken())return;
+      _pbDataLoaded=true;
       if(ls)ls.style.display='none';
       initFilters();initWeekSel();initViewerFilters();computeDLBL(curWK());computeTodayCol();renderGrid();renderViewer();
     });
@@ -1967,7 +1986,7 @@ function dshKpiDrill(type){
   document.getElementById('dsh-ov').classList.add('open');
 }
 function closeDshDrill(){document.getElementById('dsh-ov').classList.remove('open');}
-loadData();
+_pbStartApp();
 </script>
 <div class="sched-footer">Developed for Pac-Biz Operations MCerna | Python v06.26.2026</div>
 </body>
