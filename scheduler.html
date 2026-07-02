@@ -879,6 +879,8 @@ async function doLogin(){
 }
 function lgKey(e){if(e.key==='Enter')doLogin();}
 function doLogout(){
+  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+  if(typeof dirtyIds!=='undefined'&&dirtyIds.size)doSave();
   _clearIdleTimer();
   _pbClearAuth();
   document.getElementById('lg-user').value='';
