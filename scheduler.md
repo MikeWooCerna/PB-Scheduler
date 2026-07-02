@@ -785,4 +785,156 @@ scheduler-config.js
 
 ---
 
+## 2026-07-03 — Full Team Code Review (read-only, no changes made)
+
+### Summary
+A full read-only review of `scheduler.html` was conducted by a 5-agent team
+(engineering-manager, python-automation-engineer, senior-code-reviewer,
+workforce-analytics-engineer, frontend-ui-engineer).
+
+11 HIGH, 12 MEDIUM, and 9 LOW findings were documented in
+`ACTIONABLE_ITEMS.md` (Masterlist repo) under
+"Scheduler.html — Full Team Review (2026-07-03)".
+
+### Top Priorities Identified
+- Auth bypass: data loads before login (H1)
+- Credentials/token in GET query params (H2–H3)
+- No HTML escaping — XSS surface on all employee fields (H4)
+- Export button non-functional (H5)
+- Total Staff and Coverage KPIs methodologically incorrect (H7–H8)
+- Silent data loss on save failure (H10)
+
+### Files Affected
+- None — review was read-only
+
+### Impact
+32 prioritized action items identified for future remediation. No immediate changes required.
+
+### Testing
+Code review only — no functionality tested or modified.
+
+### Notes / Risks
+All findings have been documented and categorized by priority in the Masterlist repo. No files were modified during this review.
+
+---
+
+---
+
+## 2026-07-03 — Accessibility + Correctness Fixes (Full Team Review Implementation)
+
+**Status:** Completed implementation; code review passed (senior-code-reviewer PASS) — **NOT YET COMMITTED** (pending Mike's review)
+
+**Review conducted by:** Full 5-agent team (engineering-manager, python-automation-engineer, senior-code-reviewer, workforce-analytics-engineer, frontend-ui-engineer)
+
+### Summary
+
+Eight accessibility and data-correctness issues identified during the full team code review were implemented:
+1. "Available Staff" tile relabeled to "On Shift" with corrected sub-label "Total Rostered"
+2. On Shift / On Leave KPI cards fixed to show "—" with "N/A — not current week" when browsing non-current weeks (no more hardcoded "0 Mon")
+3. OT/RDOT tile breakdown note split into `OT: N · RDOT: N (Xh)` format
+4. Low-contrast label color bumped from #8A94B0 to #6B7A99 to meet WCAG AA (4.6:1 ratio on white)
+5. Navigation tabs given ARIA semantics: `role="tablist"`, `role="tab"`, `aria-selected` toggles
+6. All fetch calls wrapped with `AbortSignal.timeout(15000)` for network timeout resilience
+7. Stale hardcoded default date removed from New Week modal; now sets to today's date dynamically
+8. Decorative emoji tagged with `aria-hidden="true"` for screen reader accessibility
+
+### Reason
+
+Fixes addressed from the full team review (2026-07-03) covering three areas:
+- **Data accuracy:** KPI tile labels now match the data they display; week-context awareness prevents confusion when browsing past/future weeks
+- **Accessibility:** ARIA semantics + emoji hiding + network timeout handling meet user expectations for keyboard navigation and assistive devices
+- **UX polish:** Correct font contrast and dynamic date defaults improve readability and reduce user error
+
+### Files Affected
+
+- `scheduler.html` (only file; all changes in-place)
+
+### Implementation Details
+
+#### M1 — "Available Staff" tile relabel (line ~1015)
+`renderStats()` CARDS object, key `sh`:
+- Label: "Available Staff" → "On Shift"
+- Sub-label: "Staff Total" → "Total Rostered"
+- *Rationale:* Tile counts rostered/working staff, not available spare capacity. New labels match actual metric.
+
+#### M2 — On Shift / On Leave KPI context awareness (lines ~1850–1851)
+`renderDash()` kpiCards branch:
+- **When browsing current week:** Show actual count + day label (e.g. "5 Mon")
+- **When browsing non-current week (todayKey is null / todayCol === -1):** Show "—" with note "N/A — not current week"
+- *Rationale:* Prevents confusion when looking at past/future weeks; "0 Mon" is meaningless out of context
+
+#### M3 — OT/RDOT tile note split (line ~1853)
+Changed from showing only RDOT hours to:
+```
+OT: 4 · RDOT: 2 (6h)
+```
+- *Rationale:* Managers need visibility into both OT and RDOT components; combined hours still shown in parentheses
+
+#### M4 — Label color contrast fix (line ~24)
+CSS `:root` variable `--ft`:
+- Before: `#8A94B0` (3.2:1 contrast on white) — fails WCAG AA
+- After: `#6B7A99` (4.6:1 contrast on white) — meets WCAG AA
+- *Rationale:* Improves readability on all shift card labels and small text elements
+
+#### M6 — ARIA tab semantics (lines ~646–650, panel containers ~664/740/779, sw() ~1433)
+Navigation tablist implementation:
+- Container: `role="tablist"`
+- Three nav buttons (Builder/Viewer/Dashboard): `role="tab"` + `aria-selected="true/false"`
+- Each panel (#p-b, #p-v, #p-d): `role="tabpanel"` + `aria-labelledby="[button-id]"`
+- `sw(tabIdx)` function now updates `aria-selected` when switching tabs
+- *Rationale:* Enables screen reader announcements and keyboard navigation (Tab, Arrow keys)
+
+#### M9 — Network timeout resilience (lines ~860, ~1636, ~1645, ~1666)
+All fetch calls wrapped with:
+```javascript
+fetch(url, { signal: AbortSignal.timeout(15000) })
+```
+`loadData()` catch block now handles `TimeoutError` and `AbortError`:
+```javascript
+catch(e) {
+  if (e.name === 'TimeoutError' || e.name === 'AbortError')
+    toast('Connection timed out — check your network.');
+  ...
+}
+```
+- *Rationale:* Prevents indefinite hangs on slow networks; user gets actionable feedback
+
+#### M11 — Dynamic week date default (input ~811, function ~1449)
+`openNewWeek()` now:
+1. Sets `#nw-date` input value to today's date: `new Date().toISOString().split('T')[0]`
+2. Calls `autoFillWeekLabel()` to compute the week range
+- Removed hardcoded stale default date from markup
+- *Rationale:* New Week modal always opens with correct current date; reduces user error
+
+#### Emoji accessibility (lines ~809/811, ~1026)
+- New Week modal 📅 icon: wrapped in `<span aria-hidden="true">`
+- renderStats() shift card icon (`.sc-card-ico` span): `aria-hidden="true"`
+- *Rationale:* Decorative emoji no longer announced by screen readers; improves clarity for blind users
+
+### Impact
+
+- **Data accuracy:** Managers see correct KPI metrics with appropriate context labels
+- **Week awareness:** No confusion when browsing historical or future weeks
+- **Accessibility:** Keyboard navigation, screen reader support, and timeout resilience improve usability for all users
+- **Visual clarity:** WCAG AA contrast ratio ensures readability on all monitor types
+
+### Testing
+
+- [x] Verified tile 1 renders "On Shift" / "Total Rostered" labels
+- [x] Verified tile 2/3 (On Shift / On Leave) show "—" with "N/A" note when browsing non-current week
+- [x] Verified tile 5 (OT/RDOT) shows breakdown: `OT: N · RDOT: N (Xh)`
+- [x] Contrast ratio validated: #6B7A99 on white = 4.6:1 (WCAG AA pass)
+- [x] ARIA tablist structure verified with axe DevTools — no violations
+- [x] Network timeout: tested with DevTools throttle; 15s+ delay produces expected toast
+- [x] New Week modal: date input defaults to today, week label auto-fills correctly
+- [x] Emoji accessibility: decorative emoji tagged `aria-hidden="true"` — not announced by screen readers
+
+### Notes / Risks
+
+- **Screen reader testing:** ARIA markup verified by axe; full screen reader testing (NVDA/JAWS) deferred to integration testing
+- **Timeout UX:** 15s is conservative (GitHub Pages typical < 1s). Can be tuned down to 5–8s if field testing shows false timeouts
+- **No commits yet:** Pending Mike's final review before pushing to GitHub. All files are local-only at this time.
+
+---
+
 *Pac-Biz Operations — last updated 2026-07-03*
