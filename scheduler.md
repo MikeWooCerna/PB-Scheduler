@@ -707,4 +707,49 @@ None — straightforward data correction with no side effects.
 
 ---
 
-*Pac-Biz Operations — last updated 2026-07-02*
+## 2026-07-03 — GitHub Deployment — PB-Scheduler Repository Launch
+
+### Summary
+The Scheduler was deployed to its own GitHub repository for the first time. Previous deployments were local-only (no git tracking). Initial commit `c4605cd` pushed successfully to https://github.com/MikeWooCerna/PB-Scheduler.git on branch `main`. Seven files committed: `scheduler.html`, `pac_biz_builder_36.html`, `pac_biz_viewer.html`, `pac_biz_planning.html`, `pac_biz_viewer_dashboard_docs.md`, `scheduler.md`, and `.gitignore`.
+
+### Reason
+Enables version control, change history, and potential future CI/CD integration. Also provides a backup of the Scheduler codebase separate from the Masterlist/Dashboard repository.
+
+### Files Affected
+- Entire Scheduler directory (7 files committed)
+- `.gitignore` (NEW) — excludes `scheduler-config.js` and `*.local.js`
+
+### Important: Credential Handling
+
+**`scheduler-config.js` is intentionally NOT committed and must NEVER be committed to git.**
+
+This file contains:
+- `MASTERLIST_CSV_URL` — Google Sheets CSV feed URL
+- `SCHEDULER_API_URL` — Apps Script web app endpoint
+- `USERS` — auth credential map (username → password)
+
+The `.gitignore` at the Scheduler root (lines 1–2) explicitly excludes:
+```
+scheduler-config.js
+*.local.js
+```
+
+**For future maintainers:** Any fresh clone of the Scheduler repo will have `scheduler.html` but NOT `scheduler-config.js`. The app will fail with `ReferenceError` on load until `scheduler-config.js` is manually provisioned alongside `scheduler.html`. This is by design — credentials must never travel in git history.
+
+### Impact
+- **Version control:** All future Scheduler changes can be tracked, branched, and reviewed in git
+- **Multi-host deployment:** Can now pull and deploy Scheduler to other machines without manually copying files
+- **Git history:** Clean separation from Masterlist/Dashboard repo; each project has its own history
+
+### Testing
+- Confirmed initial commit `c4605cd` pushed to `https://github.com/MikeWooCerna/PB-Scheduler.git` main branch
+- Verified 7 files in initial commit (no `scheduler-config.js` present — correct)
+- Confirmed `.gitignore` present and excludes `scheduler-config.js`
+- Page load on local copy without `scheduler-config.js` produces expected `ReferenceError` (credential file missing)
+
+### Notes / Risks
+**Provisioning critical:** Anyone who clones this repo or downloads `scheduler.html` from GitHub without also obtaining `scheduler-config.js` (from a separate secure location or local backup) will see a broken app. Recommend adding a prominent `README.md` in the Scheduler repo root explaining the provisioning step and pointing cloners to the local backup location or a credential-provisioning runbook.
+
+---
+
+*Pac-Biz Operations — last updated 2026-07-03*
