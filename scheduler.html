@@ -1849,7 +1849,7 @@ function renderDash(){
     {v:tot_staff,l:'Total Staff',c:'b',n:'across accounts',click:''},
     todayKey?{v:ts,l:'On Shift '+todayLbl,c:'g',n:'shift & OT',click:''}:{v:'—',l:'On Shift',c:'g',n:'N/A — not current week',click:''},
     todayKey?{v:tl,l:'On Leave '+todayLbl,c:'a',n:'VL, SL & flex',click:"dshKpiDrill('leave')"}:{v:'—',l:'On Leave',c:'a',n:'N/A — not current week',click:''},
-    {v:tvlsl,l:'VL / SL',c:'',n:'leaves this week',click:"dshKpiDrill('leave')"},
+    {v:tvlsl,l:'VL / SL',c:'',n:'leaves this week',click:"dshKpiDrill('leaveweek')"},
     {v:tot_ot+tr,l:'OT / RDOT',c:'v',n:'OT: '+tot_ot+' · RDOT: '+tr+' ('+Math.round(trh)+'h)',click:"dshKpiDrill('rdot')"}
   ];
   var kr=document.getElementById('dsh-kpi-row');
@@ -1977,6 +1977,30 @@ function dshKpiDrill(type){
       '<div class="dsh-dps-c"><div class="dsh-dps-v" style="color:#92400E">'+vlCt+'</div><div class="dsh-dps-l">VL</div></div>'+
       '<div class="dsh-dps-c"><div class="dsh-dps-v" style="color:#991B1B">'+slCt+'</div><div class="dsh-dps-l">SL</div></div>'+
       (fxCt?'<div class="dsh-dps-c"><div class="dsh-dps-v" style="color:#831843">'+fxCt+'</div><div class="dsh-dps-l">Flex</div></div>':'');
+  } else if(type==='leaveweek'){
+    var accts=ALL_ACCTS.filter(function(a){return STAFF.some(function(s){return s.accts&&s.accts.indexOf(a)>=0;})&&(!dshAcctFilter||dshAcctFilter.has(a));});
+    accts.forEach(function(acct){
+      var acctStaff=STAFF.filter(function(s){return s.accts&&s.accts.indexOf(acct)>=0;});
+      DAYS.forEach(function(day,i){
+        acctStaff.forEach(function(s){
+          var d=getSch(s.id,day);
+          var dayAcct=d.a||s.acct;
+          if(s.accts.length>1&&dayAcct!==acct)return;
+          if(d.t==='vl'||d.t==='sl')
+            rows.push({nm:s.nm,ini:s.in||'?',cl:ACCT_CLR[acct]||'#64748b',acct:acct,t:d.t,dy:DLBL[i][0]+' '+DLBL[i][1]});
+        });
+      });
+    });
+    var vlCt=rows.filter(function(r){return r.t==='vl';}).length;
+    var slCt=rows.filter(function(r){return r.t==='sl';}).length;
+    document.getElementById('dsh-dph').innerHTML=
+      '<div class="dsh-dph-ac"><span class="dsh-dph-dot" style="background:#D97706"></span><span class="dsh-dph-nm">VL / SL — '+WEEKS[curWeekIdx].s+'</span></div>'+
+      '<span class="dsh-dph-dy">'+WEEKS[curWeekIdx].s+'</span>'+
+      '<button class="dsh-dpx" onclick="closeDshDrill()">✕</button>';
+    document.getElementById('dsh-dps').innerHTML=
+      '<div class="dsh-dps-c"><div class="dsh-dps-v" style="color:#D97706">'+rows.length+'</div><div class="dsh-dps-l">Total</div></div>'+
+      '<div class="dsh-dps-c"><div class="dsh-dps-v" style="color:#92400E">'+vlCt+'</div><div class="dsh-dps-l">VL</div></div>'+
+      '<div class="dsh-dps-c"><div class="dsh-dps-v" style="color:#991B1B">'+slCt+'</div><div class="dsh-dps-l">SL</div></div>';
   } else {
     STAFF.forEach(function(s){
       DAYS.forEach(function(day,i){

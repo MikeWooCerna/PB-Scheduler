@@ -937,4 +937,53 @@ catch(e) {
 
 ---
 
+## 2026-07-03 — Fixed VL/SL Weekly KPI Tile Drill-Down
+
+### Summary
+
+The "VL / SL" KPI tile on the Dashboard KPI row displayed a correct WEEKLY count of vacation and sick leave entries (accumulated from all 7 days of the week). However, its click handler reused `dshKpiDrill('leave')`, which only inspected a SINGLE day (today). When VL/SL entries fell on days other than today, the drill-down list returned empty even though the tile showed a non-zero count. The 'leave' handler also included flex (fx) entries and ignored the account filter, making it incompatible with the weekly aggregation.
+
+Fixed by introducing a new `dshKpiDrill('leaveweek')` branch that iterates all 7 days, matches only VL/SL entries (excluding fx), respects the account filter, and reconciles drill-down row count exactly with the tile's count.
+
+### Reason
+
+Data accuracy: the drill-down must show the exact same rows that were summed to produce the tile's count. The original single-day 'leave' handler created a mismatch where the tile showed a count but the drill-down was empty, confusing managers. Verification confirmed the reconciliation is now perfect across all account-filter states.
+
+### Files Affected
+
+- `scheduler.html`
+
+### Changes Made
+
+**Line ~1852 — Shift click handler from "VL / SL" tile:**
+- Changed from `dshKpiDrill('leave')` to `dshKpiDrill('leaveweek')`
+- The "On Leave Today" tile (line ~1851) remains unchanged on `dshKpiDrill('leave')`
+
+**Lines ~1980–2003 — New `'leaveweek'` branch in `dshKpiDrill(type)`:**
+- Iterates all 7 days of the browsed week (not just today)
+- Matches only `d.t==='vl'||d.t==='sl'` entries (excludes fx, matching the tile's count logic)
+- Respects `dshAcctFilter` account filter using the same staff derivation and multi-account tie-break as other branches: `dayAcct=d.a||s.acct; if(s.accts.length>1&&dayAcct!==acct)return;`
+- Displays the day each entry falls on via the `dy` field in the drill-down panel
+- Renders a VL/SL per-type breakdown in the drill-down panel header
+
+### Impact
+
+Managers can now click the "VL / SL" KPI tile and see the complete list of vacation and sick leave entries that were summed into the displayed count. The drill-down reconciles exactly with the weekly total, eliminating confusion when leave entries are spread across multiple days.
+
+### Testing
+
+- [x] Verified drill-down row count matches tile count for all account-filter states (rows.length === tvlsl guaranteed, not coincidental)
+- [x] Confirmed 'leave' branch (On Leave Today) unchanged — no regression to single-day behavior
+- [x] Verified DLBL (day-of-week) indexing is consistent with other drill-down branches
+- [x] No new XSS surface introduced — all employee data passed through existing sanitization
+- [x] Code review passed: senior-code-reviewer verdict PASS
+
+### Notes / Risks
+
+**Non-blocking nit:** Pre-existing style issue — duplicate `var vlCt/slCt` declarations across if/else-if branches in the new code block. Harmless and consistent with existing code style; deferred to cosmetic cleanup.
+
+**Deferred cosmetic enhancement:** Weekly tile remains UNGATED for non-current weeks (a weekly total is meaningful for past/future weeks, unlike "On Leave Today"). Optional future UX tweak: the tile note still says "leaves this week" which may read ambiguously when browsing a non-current week — consider using the browsed week label. Not implemented in this fix.
+
+---
+
 *Pac-Biz Operations — last updated 2026-07-03*
