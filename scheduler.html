@@ -277,6 +277,9 @@ body.embed-mode .lg-topbar-info{display:none!important;}
 .sbt.a-tn{background:var(--tn-bg);color:var(--tn-tx);border-color:var(--tn-dot);}
 .t-sel-inp{width:100%;font-size:12px;border:1px solid var(--bdr2);border-radius:4px;padding:3px 4px;font-family:'Consolas',monospace;font-weight:700;background:var(--surf);color:var(--tx);outline:none;cursor:pointer;margin-top:3px;}
 .t-sel-inp:focus{border-color:var(--pur);}
+.rd-time{display:flex;align-items:center;gap:3px;margin-top:3px;}
+.rd-time .t-sel-inp{width:auto;flex:1;min-width:0;font-size:10px;padding:3px 2px;margin-top:0;}
+.rd-arr{font-size:10px;color:var(--mt);flex-shrink:0;}
 .ac-sel{font-size:11px;border:1px solid var(--bdr2);border-radius:4px;padding:3px 4px;font-family:inherit;color:var(--tx);background:var(--surf);width:100%;cursor:pointer;outline:none;margin-top:2px;border-left-width:4px;}
 .leave-blk{border-radius:5px;padding:6px 5px;font-size:11px;font-weight:800;text-align:center;margin-top:3px;line-height:1.3;}
 .cell-hrs{font-size:11px;color:var(--mt);margin-top:auto;text-align:center;font-variant-numeric:tabular-nums;font-weight:600;}
@@ -979,7 +982,12 @@ var vwSupFilter=null;
 function p2(n){return n<10?'0'+n:String(n);}
 function getStaff(id){return STAFF.find(function(s){return s.id===id;});}
 function hrs(s,e){if(!s||!e)return 0;var sh=parseInt(s.slice(0,2))*60+parseInt(s.slice(2,4));var eh=parseInt(e.slice(0,2))*60+parseInt(e.slice(2,4));var d=eh-sh;if(d<0)d+=1440;return d/60;}
-function dayHrs(id,day){var d=getSch(id,day);return['sh','tn','rd','ot'].indexOf(d.t)>=0?hrs(d.s,d.e):0;}
+/* RDOT variable-duration hours (2026-07-13): real hrs(s,e) when both times are set; falls back to
+   the legacy fixed 8h assumption ONLY when a saved RDOT day has no time range at all (pre-existing
+   rows from before RDOT supported variable duration). Shift/Training/OT are untouched — they keep
+   using hrs()/0 exactly as before. */
+function rdHrs(d){return(d.s&&d.e)?hrs(d.s,d.e):8;}
+function dayHrs(id,day){var d=getSch(id,day);if(d.t==='rd')return rdHrs(d);return['sh','tn','ot'].indexOf(d.t)>=0?hrs(d.s,d.e):0;}
 function weekHrs(id){return DAYS.reduce(function(a,d){return a+dayHrs(id,d);},0);}
 function bStyle(t){var m={sh:'background:var(--sh-bg);color:var(--sh-tx)',tn:'background:var(--tn-bg);color:var(--tn-tx)',off:'background:var(--of-bg);color:var(--of-tx)',vl:'background:var(--vl-bg);color:var(--vl-tx)',sl:'background:var(--sl-bg);color:var(--sl-tx)',rd:'background:var(--rd-bg);color:var(--rd-tx)',ot:'background:var(--ot-bg);color:var(--ot-tx)',fx:'background:var(--fx-bg);color:var(--fx-tx)'};return m[t]||m.off;}
 function bLbl(t){return{sh:'On Shift',tn:'Training',off:'Rest Day',vl:'VL',sl:'SL',rd:'RDOT',ot:'OT',fx:'Flexi'}[t]||'Rest Day';}
@@ -1018,6 +1026,27 @@ function makeShiftOpts(curStart){
         out+='<option value="'+val2+'"'+(curStart===s2?' selected':'')+'>01:'+m+' → '+e2.slice(0,2)+':'+m+'</option>';
       });
     }
+  }
+  return out;
+}
+
+/* RDOT independent start/end time picker (2026-07-13, Option B): unlike makeShiftOpts() which only
+   offers fixed 8h start→end pairs, this lists every individual 15-min time-of-day value so RDOT's
+   start and end can be picked separately, giving variable duration (1h, 1.5h, full shift, etc). */
+function makeTimeOpts(curVal){
+  var out='';
+  if(!curVal){
+    /* 2026-07-13 UX fix: legacy RDOT rows (no s/e saved at all) were defaulting to the browser's
+       first option, showing a misleading "00:00" instead of reflecting the real 8h-fallback the
+       hours math already applies (see rdHrs()). Display-only placeholder — selecting it writes ''
+       via setRdStart/setRdEnd, same as today; nothing is written just by rendering this option. */
+    out+='<option value="" selected>— full shift (8h) —</option>';
+  }
+  for(var h=0;h<24;h++){
+    [0,15,30,45].forEach(function(m){
+      var v=p2(h)+p2(m);
+      out+='<option value="'+v+'"'+(curVal===v?' selected':'')+'>'+p2(h)+':'+p2(m)+'</option>';
+    });
   }
   return out;
 }
@@ -1280,10 +1309,14 @@ function _doRenderGrid(){
       var d=getSch(s.id,day);var wk=WKND[i]?' wk':'';
       var btns=BTNS.map(function(b){var act=d.t===b.t?' a-'+b.t:'';return '<button class="sbt'+act+'" onclick="setShift(\''+s.id+'\',\''+day+'\',\''+b.t+'\')">'+b.l+'</button>';}).join('');
       var inner='';
-      if(d.t==='sh'||d.t==='tn'||d.t==='rd'||d.t==='ot'){
+      var isWorkDay=d.t==='sh'||d.t==='tn'||d.t==='rd'||d.t==='ot';
+      if(d.t==='rd'){
+        /* RDOT Option B (2026-07-13): independent start/end pickers instead of the fixed 8h pair used by Shift/Training/OT, so duration can be 1h, 1.5h, a full shift, etc. */
+        inner='<div class="rd-time"><select class="t-sel-inp rd-s" onchange="setRdStart(\''+s.id+'\',\''+day+'\',this.value)">'+makeTimeOpts(d.s)+'</select><span class="rd-arr">→</span><select class="t-sel-inp rd-e" onchange="setRdEnd(\''+s.id+'\',\''+day+'\',this.value)">'+makeTimeOpts(d.e)+'</select></div>';
+      }else if(isWorkDay){
         inner='<select class="t-sel-inp" onchange="setShiftTime(\''+s.id+'\',\''+day+'\',this.value)">'+makeShiftOpts(d.s)+'</select>';
-        if(s.accts.length>1){var acColor=ACCT_CLR[d.a]||'#64748b';var opts=s.accts.map(function(a){var c=ACCT_CLR[a]||'#64748b';return '<option value="'+a+'"'+(a===d.a?' selected':'')+' style="background:'+c+';color:#fff;font-weight:700">'+a+'</option>';}).join('');inner+='<select class="ac-sel" style="border-left-color:'+acColor+'" onchange="setDayAcct(\''+s.id+'\',\''+day+'\',this.value)">'+opts+'</select>';}
       }else if(d.t==='vl'||d.t==='sl'||d.t==='fx'){inner='<div class="leave-blk" style="'+bStyle(d.t)+'">'+(d.t==='vl'?'Vacation Leave':d.t==='sl'?'Sick Leave':'Flexible')+'</div>';}
+      if(isWorkDay&&s.accts.length>1){var acColor=ACCT_CLR[d.a]||'#64748b';var opts=s.accts.map(function(a){var c=ACCT_CLR[a]||'#64748b';return '<option value="'+a+'"'+(a===d.a?' selected':'')+' style="background:'+c+';color:#fff;font-weight:700">'+a+'</option>';}).join('');inner+='<select class="ac-sel" style="border-left-color:'+acColor+'" onchange="setDayAcct(\''+s.id+'\',\''+day+'\',this.value)">'+opts+'</select>';}
       var h=dayHrs(s.id,day);
       return '<div class="ed-dc'+wk+'"><div class="sbtns">'+btns+'</div>'+inner+'<div class="cell-hrs">'+(h>0?h+'h':'—')+'</div></div>';
     }).join('');
@@ -1310,8 +1343,28 @@ function _doRenderGrid(){
 function renderGridNow(){if(_rafId){cancelAnimationFrame(_rafId);_rafId=null;}_doRenderGrid();}
 
 function toggleRow(id){selId=(selId===id)?null:id;pickerOpen=false;renderGridNow();if(selId){var el=document.querySelector('.sg-row.sel');if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});}}
-function setShift(id,day,type){var d=getSch(id,day);d.t=type;if(type==='sh'||type==='tn'||type==='rd'||type==='ot'){if(!d.s)d.s='0800';if(!d.e)d.e='1600';if(!d.a)d.a=getStaff(id).accts[0];}getStaff(id).mod=true;dirtyIds.add(id);scheduleSave();renderGrid();}
+function setShift(id,day,type){
+  var d=getSch(id,day);d.t=type;
+  if(type==='sh'||type==='tn'||type==='ot'){
+    /* 2026-07-13 bugfix: a fixed-8h-paired type (Shift/Training/OT) must always land on an s/e pair
+       that makeShiftOpts() can actually display as selected. Without this, an s/e inherited from a
+       variable-duration RDOT edit (e.g. 0800-1415) would show as "0800 → 1600" in the dropdown
+       (selected is matched by start only) while d.e stayed the stale 1415 underneath — hrs() then
+       silently computed 6.25h instead of 8h. Normalize here so display and stored data always agree. */
+    var mm=d.s?d.s.slice(2,4):'';
+    var representable=!!d.s&&(mm==='00'||(d.s.slice(0,2)==='01'&&(mm==='15'||mm==='30'||mm==='45')));
+    if(!representable){d.s='0800';d.e='1600';}
+    else{var expectedE=p2((parseInt(d.s.slice(0,2))+8)%24)+mm;if(d.e!==expectedE)d.e=expectedE;}
+    if(!d.a)d.a=getStaff(id).accts[0];
+  }else if(type==='rd'){
+    if(!d.s)d.s='0800';if(!d.e)d.e='1600';if(!d.a)d.a=getStaff(id).accts[0];
+  }
+  getStaff(id).mod=true;dirtyIds.add(id);scheduleSave();renderGrid();
+}
 function setShiftTime(id,day,val){var p=val.split('-');var d=getSch(id,day);d.s=p[0];d.e=p[1];getStaff(id).mod=true;dirtyIds.add(id);scheduleSave();renderGrid();}
+/* RDOT independent start/end setters (2026-07-13, Option B) — same s/e fields as Shift, just set one at a time so duration can be anything, not just a fixed 8h pair. */
+function setRdStart(id,day,val){var d=getSch(id,day);d.s=val;getStaff(id).mod=true;dirtyIds.add(id);scheduleSave();renderGrid();}
+function setRdEnd(id,day,val){var d=getSch(id,day);d.e=val;getStaff(id).mod=true;dirtyIds.add(id);scheduleSave();renderGrid();}
 function setDayAcct(id,day,val){getSch(id,day).a=val;dirtyIds.add(id);scheduleSave();renderGrid();}
 function addAcct(id,acct){var s=getStaff(id);if(s.accts.indexOf(acct)<0)s.accts.push(acct);dirtyIds.add(id);scheduleSave();pickerOpen=false;renderGrid();}
 function removeAcct(id,acct){var s=getStaff(id);s.accts=s.accts.filter(function(a){return a!==acct;});DAYS.forEach(function(d){var dd=getSch(id,d);if(dd.a===acct)dd.a=s.accts[0]||'';});dirtyIds.add(id);scheduleSave();pickerOpen=false;renderGrid();}
@@ -1388,7 +1441,9 @@ function renderViewer(){
       if(isTeam)return tot+weekHrs(s.id);
       return tot+DAYS.reduce(function(h,day){
         var d=getSch(s.id,day);
-        if((d.t==='sh'||d.t==='tn'||d.t==='rd'||d.t==='ot')&&(d.a||s.acct)===gk&&d.s&&d.e)return h+hrs(d.s,d.e);
+        if((d.a||s.acct)!==gk)return h;
+        if(d.t==='rd')return h+rdHrs(d);
+        if((d.t==='sh'||d.t==='tn'||d.t==='ot')&&d.s&&d.e)return h+hrs(d.s,d.e);
         return h;
       },0);
     },0);
@@ -1428,7 +1483,9 @@ function renderViewer(){
       }).join('');
       var w=isTeam?weekHrs(s.id):DAYS.reduce(function(tot,day){
         var d=getSch(s.id,day);
-        if((d.t==='sh'||d.t==='tn'||d.t==='rd'||d.t==='ot')&&(d.a||s.acct)===gk&&d.s&&d.e)return tot+hrs(d.s,d.e);
+        if((d.a||s.acct)!==gk)return tot;
+        if(d.t==='rd')return tot+rdHrs(d);
+        if((d.t==='sh'||d.t==='tn'||d.t==='ot')&&d.s&&d.e)return tot+hrs(d.s,d.e);
         return tot;
       },0);
       var modDot=s.mod?'<span class="vw-mdot"></span>':'';
@@ -1866,7 +1923,7 @@ function renderDash(){
         if(s.accts.length>1&&dayAcct!==acct)return;
         if(d.t==='sh'||d.t==='tn'){shCt++;h+=hrs(d.s,d.e);}
         else if(d.t==='vl')vlCt++;else if(d.t==='sl')slCt++;
-        else if(d.t==='rd'){rdCt++;var rdt=hrs(d.s,d.e);h+=rdt;rh+=rdt;}
+        else if(d.t==='rd'){rdCt++;var rdt=rdHrs(d);h+=rdt;rh+=rdt;}
         else if(d.t==='ot'){otCt++;h+=hrs(d.s,d.e);}
         else if(d.t==='fx')fxCt++;
       });

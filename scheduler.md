@@ -269,7 +269,7 @@ Horizontal scroll on `dsh-scroll` mirrors `scrollLeft` onto `dsh-hw`.
 | `off` | Rest Day | Day off. No time needed. |
 | `vl` | VL | Vacation Leave. |
 | `sl` | SL | Sick Leave. |
-| `rd` | RDOT | Rest Day Overtime. Requires start/end time. |
+| `rd` | RDOT | Rest Day Overtime. Requires start/end time (independent pickers at 15-min granularity; defaults to 8h if no times set). (Updated 2026-07-13) |
 | `ot` | OT | Overtime. Requires start/end time. |
 | `fx` | Flexi | Flexible schedule. |
 
@@ -1590,6 +1590,159 @@ Expands the Scheduler's shift scheduling capabilities to support training shifts
 ### 2026-07-13 — CSS Polish: Row-Editor Button Spacing
 
 - **Shift-type button row spacing refined** — `.sbtns` gap 2px→3px and `.sbt` padding 3px 5px→3px 4px for uniform row+column spacing. Allows the 8-button editor row to wrap cleanly on narrow day columns. CSS-only, no behavior changes. Code review: PASS.
+
+---
+
+## 2026-07-13 — RDOT Variable Duration (Option B)
+
+**Status:** Completed and passed code review (senior-code-reviewer: PASS WITH NOTES, re-reviewed PASS)
+
+### Summary
+
+RDOT (`rd`) shifts are no longer fixed to 8 hours. When RDOT is selected in the expanded row editor, two independent time dropdowns (start + end) now appear at 15-minute granularity via a new `makeTimeOpts()` helper and `setRdStart()`/`setRdEnd()` handlers. Shift, Training, and OT retain their original paired time picker (`makeShiftOpts()`). The existing JSON shape `{"t":"rd","s":"HHMM","e":"HHMM","a":...}` is reused with no changes to the Google Sheets backend (blobs round-trip opaquely). A new `rdHrs(d)` helper computes actual RDOT duration with an 8-hour fallback for legacy no-time entries, preserving backward compatibility. The placeholder convention displays "— full shift (8h) —" for legacy empty-time RDOT rows.
+
+### Reason
+
+Enables flexible RDOT scheduling for shifts that do not span a full 8-hour day — e.g., a 1.5-hour RDOT session. Maintains backward compatibility with existing saved RDOT rows (no time = 8h). Fixes two pre-existing bugs where legacy no-time RDOT contributed 0h instead of 8h in Viewer group-hours and Dashboard totals.
+
+### Files Affected
+
+- `scheduler.html` (only file)
+
+### Data Model
+
+**No changes to JSON shape or backend.** RDOT continues to use `{"t":"rd","s":"HHMM","e":"HHMM","a":"Account"}`. The `s` and `e` fields are now set independently via two time pickers instead of paired picker. Legacy saved RDOT rows with empty `s` or `e` are interpreted as 8h via the fallback rule in `rdHrs(d)`.
+
+**Placeholder convention:** When rendering an RDOT row with missing/empty times, `makeTimeOpts()` prepends a display-only `<option value="" selected>— full shift (8h) —</option>`. Selecting it deliberately clears both `s` and `e` to empty strings, which round-trip to the 8h fallback. This is honest in both directions: legacy no-time rows read "full shift (8h)", and editing them to use the placeholder preserves the same behavior.
+
+### Hours Computation + Fallback Rule
+
+**New `rdHrs(d)` helper:**
+- When both `d.s` and `d.e` are present (non-empty): returns actual computed duration via the same midnight-wrap logic as `hrs()`
+- When `d.s` or `d.e` is missing/empty: returns 8 (preserves legacy no-time RDOT as full shift)
+
+**Affected aggregations:**
+- `dayHrs()` weekly totals now route RDOT through `rdHrs()` so a 1.5h RDOT adds 1.5, not 8
+- Viewer group "Hrs" columns use the same `rdHrs()` fallback
+- Dashboard OT/RDOT hours KPI now correctly sums variable-duration RDOT
+
+### Legacy Totals Change (IMPORTANT)
+
+Two pre-existing bugs were fixed:
+- Legacy no-time RDOT rows previously contributed 0h in Viewer group-hours and Dashboard (incorrect — should be 8h)
+- They now correctly contribute 8h
+
+**Consequence:** For any historical week containing un-timed RDOT entries, Viewer "Hrs" columns, Builder week totals, and Dashboard OT/RDOT-hours will VISIBLY INCREASE. This is the correct number appearing for the first time, not a regression.
+
+### Coverage & Scope
+
+**Time-of-day coverage:** The app has NO time-of-day-aware coverage logic anywhere (even for Shift). The Viewer "N on shift" pill is week-granular; the Dashboard is day-granular. Per spec, no new time-of-day coverage logic was invented. RDOT remains excluded from the on-shift pill by existing design — this is a known limitation of Option B.
+
+**Other shifts unchanged:** Shift, Training, VL, SL, OT, and Flexi behavior is unaffected. Embedded mode (`?embed=1`) unchanged. `scheduler.html` only.
+
+### Implementation Details
+
+- **Independent time pickers:** `setRdStart(id, day, val)` and `setRdEnd(id, day, val)` set `s` and `e` independently, no longer coupled
+- **15-minute granularity:** `makeTimeOpts()` helper (new, used for RDOT only) returns quarter-hour option list
+- **Grid rendering:** RDOT cells display start–end times or "8h" (fallback) depending on whether times are present
+- **Expanded editor:** Two time dropdown fields (start, end) render when RDOT is selected; placeholder message appears when times are empty
+
+### Impact
+
+- **Scheduler grid:** RDOT shifts now display actual duration (e.g., "02:30 → 04:00" or "8h" if no times set)
+- **Builder weekly totals:** Variable-duration RDOT correctly included
+- **Viewer group hours:** "Hrs" pill now includes variable-duration RDOT contributions
+- **Dashboard KPI:** OT/RDOT hours tile now correctly aggregates variable-duration RDOT
+- **Backward compatibility:** Legacy no-time RDOT rows continue to function and are interpreted as 8h
+- **Save/load:** All RDOT variations persist and round-trip correctly to Google Sheets
+
+### Testing
+
+- [x] Two independent time dropdowns render when RDOT is selected in the inline row editor
+- [x] Time dropdowns show 15-minute granularity options (00:00, 00:15, 00:30, ..., 23:45)
+- [x] Placeholder "— full shift (8h) —" appears when RDOT times are empty (legacy rows)
+- [x] Selecting placeholder clears both `s` and `e` to empty strings
+- [x] RDOT cells display start–end time or "8h" fallback depending on times presence
+- [x] `rdHrs()` returns actual duration when times present; 8h when times missing
+- [x] `dayHrs()` weekly totals correctly include variable-duration RDOT
+- [x] Viewer group "Hrs" pill correctly sums variable-duration RDOT (legacy no-time = 8h)
+- [x] Dashboard OT/RDOT hours KPI correctly aggregates all RDOT variations
+- [x] Legacy no-time RDOT rows from previous weeks load and display correctly
+- [x] New RDOT with custom times (e.g., 2h) persists to Google Sheet and re-loads correctly
+- [x] Shift, Training, OT behavior unchanged (paired time picker, no independent handlers)
+- [x] Embed mode (`?embed=1`) unchanged
+- [x] Code review passed: senior-code-reviewer verdict PASS WITH NOTES (re-reviewed PASS)
+
+### Notes / Risks
+
+**Legacy totals increase:** Viewer and Dashboard hours will visibly increase for weeks containing no-time RDOT entries. This is a correction of pre-existing bugs, not a regression. Communicate to managers that historical hours were undercounted and are now correct.
+
+**No time-of-day coverage:** RDOT remains excluded from the "N on shift" pill (which counts shift `sh`, training `tn`, and ot `ot` only, by existing design). The app has no time-of-day awareness for coverage purposes. If per-shift-type or time-aware coverage logic is needed in the future, that is a separate feature.
+
+**Placeholder interaction:** The "— full shift (8h) —" option is display-only (value: empty string). It is not a selectable preset that sets `s=0000` and `e=0800`. Selecting it clears both times, which is clearer and preserves the 8h fallback semantics.
+
+**Backend compatibility:** Google Apps Script backend requires no changes. RDOT blobs with variable times round-trip opaquely; the backend does not validate time codes.
+
+---
+
+## 2026-07-13 — Bugfix: Stale Shift-Time Carried Across Type Change
+
+**Status:** Completed and passed code review (senior-code-reviewer PASS)
+
+### Summary
+
+Fixed a bug where switching a day from RDOT (e.g., 08:00 → 14:15, 6.25h) back to Shift left the day stuck at 6.25h instead of resetting to the default 8h (08:00 → 16:00). The fix is isolated to `setShift()` and ensures that when a day's type changes to a fixed-8h paired-picker type (Shift, Training, or OT), the end time is recomputed or the range is reset appropriately. RDOT and non-timed types are unaffected.
+
+### Root Cause
+
+- `setShift()` seeded `s` and `e` only when falsy, so the RDOT end time (14:15) survived the type switch
+- `makeShiftOpts()` selects its option by START time only
+- The time picker displayed "08:00 → 16:00" (paired option) but the stored end remained 14:15
+- `hrs()` computed 6.25h (08:00 to 14:15)
+- Re-selecting the same visible option fired no change event, so the mismatch never self-corrected
+
+### Fix
+
+Modified `setShift()` to handle type transitions:
+
+**When a day's type changes to a fixed-8h paired-picker type (sh/tn/ot):**
+- If the current start time is not representable by the paired dropdown (e.g., not top-of-hour, or not one of the 01:15/01:30/01:45 quarter starts), reset the range to 08:00/16:00
+- If the current start is representable, force the end to `start + 8h` (with midnight-wrap safety via `hrs()` logic)
+
+**Landing on RDOT:** Unchanged — flexible type keeps its current valid `s`/`e` unchanged.
+
+**Non-timed types (vl/sl/off/fx):** Never touch `s`/`e`, so rd → vl → rd correctly restores the original RDOT range.
+
+### Files Affected
+
+- `scheduler.html` (only file)
+
+### Impact
+
+- **Type transitions:** Switching between Shift/Training/OT now ensures correct 8h range
+- **RDOT→Shift:** Correctly resets to 08:00/16:00 (8h)
+- **Shift→RDOT→Shift:** Round-trip now works correctly
+- **Non-timed transitions:** VL, SL, Off, Flexi do not disturb stored times, allowing rd→vl→rd to preserve the RDOT range
+- **Backward compatibility:** Existing schedules unaffected; behavior change only applies to future type transitions
+
+### Testing
+
+- [x] sh→rd→sh: Results in 8h (default) ✓
+- [x] rd→ot: RDOT with custom times switches to OT 8h ✓
+- [x] ot→rd: OT switches to RDOT with flexible times ✓
+- [x] sh→tn: Shift to Training is no-op on times ✓
+- [x] rd→vl→rd: RDOT times (e.g., 6.25h) preserved across VL interlude ✓
+- [x] Unrepresentable RDOT start (e.g., 14:45) → Shift resets to 08:00/16:00 ✓
+- [x] All grid displays, Viewer hours, Dashboard KPIs reflect correct times after transitions
+- [x] Code review passed: senior-code-reviewer verdict PASS
+
+### Notes / Risks
+
+**No breaking changes:** The fix only affects future type transitions. Existing saved data (including legacy RDOT with odd start times) is not modified.
+
+**Representability:** The "representable start" check ensures only times that exist in the paired dropdown (top-of-hour options + the three new quarter-hour options 01:15, 01:30, 01:45) are preserved when landing on a paired-picker type. Other start times (e.g., 14:45) trigger a reset to 08:00/16:00.
+
+**RDOT flexibility preserved:** Switching to RDOT from any paired-picker type leaves the times alone, so if a Shift was manually edited to a custom time before switching to RDOT, that time is retained (not reset).
 
 ---
 
