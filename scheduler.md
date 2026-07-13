@@ -265,6 +265,7 @@ Horizontal scroll on `dsh-scroll` mirrors `scrollLeft` onto `dsh-hw`.
 | Code | Label | Description |
 |------|-------|-------------|
 | `sh` | On Shift | Normal working shift. Requires start/end time. |
+| `tn` | Training | Training shift. Behaves identically to On Shift with orange styling. Requires start/end time. (Added 2026-07-13) |
 | `off` | Rest Day | Day off. No time needed. |
 | `vl` | VL | Vacation Leave. |
 | `sl` | SL | Sick Leave. |
@@ -986,4 +987,610 @@ Managers can now click the "VL / SL" KPI tile and see the complete list of vacat
 
 ---
 
-*Pac-Biz Operations — last updated 2026-07-03*
+## 2026-07-04 — Schedule Tab Added to Masterlist Dashboard
+
+**Status:** Implemented and reviewed (senior-code-reviewer verdict: APPROVED WITH NOTES) — NOT YET COMMITTED pending Mike's approval
+
+### Summary
+
+A new "Schedule" tab was added to the main Pac-Biz Masterlist dashboard (`dashboard.py`) as a placeholder. It surfaces the Scheduler system architecture diagram while the Scheduler remains in POC/testing and is not yet wired into the live pipeline.
+
+The tab content is an iframe pointing to `scheduler-arch.html`, a self-contained static architecture diagram copied into the Masterlist repo directory (`c:\Users\Mike Woo Cerna\Documents\PB\Masterlist\scheduler-arch.html`, ~1.87 MB, fully self-contained: inline CSS/JS/base64 images, no external network calls).
+
+### Reason
+
+Provides early visibility into the Scheduler system for stakeholders reviewing the live Masterlist dashboard. The architecture diagram is informational only — the actual Scheduler functionality remains in POC and will replace/augment this placeholder once it moves out of testing.
+
+### Files Affected
+
+- `dashboard.py` — Three additive insertions; no existing functions or logic modified:
+  1. Nav button `data-tab="schedule"` (~line 6070)
+  2. CSS accent rule `.tab-button[data-tab="schedule"] { --tab-accent: #39B54A; }` (~line 4807)
+  3. Tab panel `id="schedulePanel"` containing iframe (~line 6811)
+- `scheduler-arch.html` — Already present in Masterlist repo (linked only, not modified)
+
+### Impact
+
+- **Dashboard UI:** New tab appears in the navigation bar between "Coaching" and "Quality" (or at tab insertion position)
+- **Existing functionality:** No changes to any existing tab, filter, KPI, or data-loading logic. The existing `switchTab()` function handles the new tab with no modification (its `tabName !== "quality"` guard already covers it)
+- **Future work:** When Scheduler moves out of POC, this placeholder tab should be replaced or augmented with live scheduling data
+
+### Testing
+
+- [x] Syntax check passed: `py -3 -m py_compile dashboard.py` (exit code 0)
+- [x] Code review passed: senior-code-reviewer verdict APPROVED WITH NOTES (no blocking issues)
+- [ ] Build test: `py -3 dashboard.py` — DEFERRED, awaiting Mike's approval
+- [ ] HTML output file timestamp verification — DEFERRED, awaiting build
+- [ ] Schedule tab button renders with correct accent color (#39B54A) — DEFERRED, awaiting build
+- [ ] Clicking Schedule tab displays iframe with architecture diagram — DEFERRED, awaiting build
+- [ ] Switching between tabs (Builder, Viewer, Dashboard, Schedule) works smoothly — DEFERRED, awaiting build
+- [ ] No errors in browser console; iframe loads without CORS issues — DEFERRED, awaiting build
+- [ ] Tab persistence: clicking other tabs and returning to Schedule re-renders correctly — DEFERRED, awaiting build
+
+### Notes / Risks
+
+- **Placeholder only:** This is a static diagram view pending actual Scheduler integration. Once Scheduler moves out of POC, this tab should be evaluated for replacement with live scheduling UI or removal entirely.
+- **No data wiring:** The iframe is self-contained; no API calls, Masterlist data, or user interactions are connected. It is purely informational.
+- **Dashboard build deferred:** Build and git push are currently DEFERRED pending Mike's final approval — this change is NOT yet live.
+
+---
+
+---
+
+## 2026-07-04 — Architecture Diagram Animation Enhancements (scheduler-arch.html)
+
+**Status:** Completed and passed code review (senior-code-reviewer round 2, PASS) — NOT YET COMMITTED
+
+### Summary
+
+The Scheduler architecture diagram (`scheduler-arch.html`) was enhanced with two new animated margin elements:
+
+1. **Right margin: "Coming Soon" badge** — Dark navy card with green (#39B54A) border + CSS pulsing glow, bold white "COMING SOON" text with green text-shadow, "Pac-Biz Scheduler" subtitle in blue (#4A9EE8), animated sparkle dots, and a looping green progress bar. Dimensions: ~240px wide, absolutely positioned via `layoutArch()` JS, stacked above the existing Data Container/Data Pipeline/Data Processing icon stack. Element ID: `archComingSoon`.
+
+2. **Left margin: "Development Lifecycle" loop** — Inline SVG circular loop with animated dash-stroke (#39B54A), 6 phase labels (Plan → Code → Build → Test → Deploy → Monitor), center text "DEVELOPMENT" / "Lifecycle" in blue (#4A9EE8), and a glowing dot traveling the loop via SVG `<animateMotion>` (8s duration, indefinite repeat). Dimensions: ~240px, dark card matching right-side styling. Element ID: `archDevLoop`.
+
+3. **Header subtitle text update** — Changed from "Access flow & module overview · Boss Presentation" to "Access flow & module overview" (removed " · Boss Presentation" suffix).
+
+### Reason
+
+Provides early visual communication about the Scheduler's development status while the system remains in POC/testing phase. The animations create visual interest and draw attention to the Scheduler as an upcoming feature. The subtitle cleanup removes outdated context.
+
+### Files Affected
+
+- `scheduler-arch.html` (local-only, no git deployment for Scheduler per project convention)
+
+### Changes Made
+
+**Right-margin "Coming Soon" badge:**
+- New div `id="archComingSoon"` with dark navy background, 2px green border
+- CSS keyframe `@keyframes archPulse` for glow effect with `animation:archPulse 2s ease-in-out infinite`
+- Green progress bar with `@keyframes archProgress` looping infinitely
+- Sparkle dots rendered as `<span>` elements with staggered animation delays
+- Absolutely positioned via `layoutArch()` function (lines ~1424–1443, dev-loop positioning decoupled from icon-stack horizontal-fit early return)
+
+**Left-margin "Development Lifecycle" loop:**
+- New div `id="archDevLoop"` with inline SVG
+- SVG `<circle>` element with animated dash pattern via CSS `stroke-dasharray` animation
+- Six phase labels positioned around the circular path
+- Center text labels "DEVELOPMENT" (top) and "Lifecycle" (bottom)
+- Animated glowing dot via SVG `<circle>` with `<animateMotion>` (8s, indefinite) and `<feGaussianBlur>` glow
+- Dot animation triggered only when `prefers-reduced-motion: no-preference` (lines ~1491–1529)
+
+**Responsiveness:**
+- Both elements hidden under `@media (max-width:1500px)` to prevent layout breakage on smaller screens
+- Coming Soon badge hides (rather than overlaps) when vertical room is insufficient
+
+**Header subtitle cleanup (line ~1176):**
+- Old: `"Access flow & module overview · Boss Presentation"`
+- New: `"Access flow & module overview"`
+
+**Motion accessibility:**
+- All animations guarded by `prefers-reduced-motion` media query
+- CSS animation properties set to `animation:none` when reduced motion is requested
+- SVG dot animation only starts via JS `.beginElement()` when reduced motion is NOT requested
+
+### Impact
+
+- **Visual polish:** The Scheduler architecture view now communicates development status and lifecycle flow through animation
+- **Accessibility:** Motion animations respect user preferences; no forced animations for users with motion sensitivity
+- **Layout robustness:** Elements positioned independently; dev-loop decoupling ensures left margin displays even if icon stack positioning changes
+- **Responsiveness:** Margin elements gracefully hide on narrow viewports (< 1500px) to prevent overflow or overlap
+
+### Testing
+
+- [x] Right-margin badge renders with correct colors: dark navy background, green border, green progress bar, blue subtitle
+- [x] Left-margin SVG loop renders with all 6 phase labels visible around the circle
+- [x] Both elements positioned correctly in left/right margins without overlapping center diagram or icon stack
+- [x] Badge "Coming Soon" text bold and white with green text-shadow
+- [x] Progress bar loops continuously (green) and never stops
+- [x] SVG dot animates around the loop for 8s cycle, repeating infinitely
+- [x] Both animations pause immediately when `prefers-reduced-motion: reduce` is set in browser/OS settings
+- [x] Layout adapts correctly when window is resized; elements hide under 1500px width
+- [x] No console errors; all inline SVG and CSS self-contained (no external assets required)
+- [x] Code review passed: senior-code-reviewer round 2, PASS verdict
+
+### Notes / Risks
+
+- **Local-only file:** `scheduler-arch.html` is not tracked in git (Scheduler has no git deployment per project convention). Changes are local only.
+- **No external assets:** Both elements are fully self-contained with inline SVG + CSS; no external images or stylesheets needed. Safe to deploy without additional file dependencies.
+- **Motion sensitivity:** All animations respect `prefers-reduced-motion` via CSS and JS guards. Users with motion disabilities will see static elements only.
+- **Future integration:** This architecture diagram is a POC visualization. Once Scheduler moves to production, the "Coming Soon" badge should be updated or removed, and the lifecycle loop may be repurposed as a live status indicator if needed.
+- **NOT YET COMMITTED:** Pending Mike's visual approval via artifact preview before any git operations.
+
+---
+
+## 2026-07-04 — Scheduler Architecture Diagram Deployed to GitHub Pages
+
+### Summary
+
+The enhanced scheduler-arch.html with "Coming Soon" animated badge and "Development Lifecycle" loop was deployed live to GitHub Pages at commit 1494d95. The file is served as a static GitHub Pages resource and iframe-loaded into the Masterlist dashboard's Schedule tab—no dashboard.py rebuild was required.
+
+### Reason
+
+The animation enhancements (completed and reviewed in the prior 2026-07-04 implementation entry) were ready for live deployment. The self-contained, static nature of scheduler-arch.html allows independent deployment without triggering a full dashboard rebuild or pipeline execution.
+
+### Files Affected
+
+- `scheduler-arch.html` (deployed to GitHub Pages via commit 1494d95, full hash: 1494d9505218ce5dbb8c4cde0ad8676c0cf4b5f8)
+- Note: `dashboard.py` unchanged; iframe continues to load scheduler-arch.html via GitHub Pages URL
+
+### Impact
+
+- **Live architecture diagram:** Scheduler system overview now displays development status ("Coming Soon" badge) and lifecycle flow ("Development Lifecycle" loop) with smooth animations
+- **Independent deployment:** Changes to scheduler-arch.html can be deployed and updated without rebuilding dashboard.py or running the full Masterlist pipeline
+- **Informational only:** Architecture diagram remains a static POC visualization; actual Scheduler functionality still in testing
+- **No impact to existing functionality:** Dashboard UI, filters, and data flows remain unchanged
+
+### Testing
+
+- Verified deployment to GitHub Pages at commit 1494d95
+- Confirmed live URL serves scheduler-arch.html with all animation elements (Coming Soon badge, Development Lifecycle loop)
+- Verified iframe in Dashboard's Schedule tab loads architecture diagram correctly and renders animations
+- All motion animations respect user's `prefers-reduced-motion` browser/OS setting
+
+### Notes / Risks
+
+- **Static file deployment:** scheduler-arch.html is fully self-contained (inline CSS/JS/SVG, no external assets); safe for independent deployment
+- **No dashboard rebuild dependency:** Future updates to the architecture diagram can be pushed as individual commits without affecting Masterlist dashboard releases
+- **POC status:** The "Coming Soon" badge should be updated or removed once the Scheduler transitions from POC/testing to production integration
+- **GitHub Pages cache:** Live URL typically reflects push within 1–2 minutes; diagram may not update immediately after commit push
+
+---
+
+## 2026-07-04 — Embed Mode for Dashboard Integration (POC)
+
+**Status:** Completed and functional (local-only, not committed)
+
+### Summary
+
+Added URL parameter-driven "embed mode" to `scheduler.html` so the Scheduler can be embedded as an iframe inside the Masterlist dashboard's Schedule tab. When loaded with `?embed=1&panel=viewer` or `?embed=1&panel=dashboard`, the app:
+
+1. Hides the branding/logo chrome and Builder nav tab button
+2. Auto-switches to the requested panel (Viewer or Dashboard) after authentication and data load
+3. Preserves all normal functionality; non-embed (no-param) standalone mode unchanged
+
+### Reason
+
+Enables the Scheduler to be surfaced as an integrated view within the Masterlist dashboard without duplicate UI chrome. Managers can view and interact with the Scheduler from the Dashboard's Schedule tab without opening a separate window.
+
+### Files Affected
+
+- `scheduler.html` (only file)
+
+### Changes Made
+
+**URL parameter reading (top of main `<script>` block):**
+```javascript
+_params = new URLSearchParams(location.search);
+_embed = _params.has('embed');
+_panel = _params.get('panel');
+```
+
+**CSS for embed mode (in `<style>` section):**
+```css
+body.embed-mode .brand,
+body.embed-mode .brand-sep { display:none; }
+body.embed-mode #nb-b { display:none; }
+```
+
+**Auto-panel switch (in `loadData()` completion handler, after `renderGrid()` and `renderViewer()`):**
+```javascript
+if(_panel==='viewer'){ sw('v'); }
+else if(_panel==='dashboard'){ sw('d'); }
+```
+
+**Body class application (when page loads with embed mode):**
+The `embed-mode` class is added to `<body>` via JavaScript when `_embed === true`.
+
+### Implementation Notes
+
+- **Tab switch function:** Existing function `sw(t)` with args `'b'` (Builder), `'v'` (Viewer), `'d'` (Dashboard)
+- **Nav button IDs:** `#nb-b` (Builder), `#nb-v` (Viewer), `#nb-d` (Dashboard)
+- **No functions renamed:** All existing function names and IDs remain unchanged
+- **Backward compatible:** Opening `scheduler.html` with no params or standard params behaves exactly as before
+
+### Usage Examples
+
+- Embed Viewer: `scheduler.html?embed=1&panel=viewer`
+- Embed Dashboard: `scheduler.html?embed=1&panel=dashboard`
+- Standalone (legacy): `scheduler.html` or `scheduler.html?panel=viewer` — displays full UI with chrome
+
+### Impact
+
+- **Dashboard integration:** Scheduler can now be embedded in an iframe with minimal UI overhead
+- **User experience:** Managers see Scheduler views (Viewer/Dashboard) directly in the Masterlist dashboard without context switching
+- **Code footprint:** 3 CSS rules + 4 lines of JS — minimal surface area, low risk of regressions
+
+### Testing
+
+- [x] URL params correctly parsed; `_embed` and `_panel` set as expected
+- [x] `embed-mode` class applied to `<body>` when `?embed=1` is present
+- [x] Branding and Builder nav tab hidden when class is applied
+- [x] Auto-switch to Viewer works: `?embed=1&panel=viewer` loads Viewer tab after auth/data
+- [x] Auto-switch to Dashboard works: `?embed=1&panel=dashboard` loads Dashboard tab after auth/data
+- [x] Standalone mode (no params) unchanged — full UI displays, no auto-switch
+- [x] All interactive features work in embed mode: filters, scheduling, saves, tab switching
+- [x] Page refresh in embed mode maintains the auto-panel switch behavior
+
+### Notes / Risks
+
+- **Local-only:** `scheduler.html` is not deployed to git. Changes remain local until/unless the Scheduler moves to production.
+- **Iframe context:** The embed mode assumes the iframe is hosted on a compatible origin (CORS, etc.). If Scheduler is deployed to a different domain, cross-origin issues may arise.
+- **Session/auth:** Each iframe maintains its own auth session. Multiple embedded Scheduler instances do not share login state.
+- **No param validation:** Invalid `panel` values (not 'viewer' or 'dashboard') result in no auto-switch; Builder tab displays. Graceful fallback.
+
+---
+
+## 2026-07-04 — Embed Mode Login Bypass (Local POC)
+
+**Status:** Completed and verified (frontend-ui-engineer, 2 implementation rounds) — local-only, NOT yet committed
+
+### Summary
+
+Added automatic login bypass when the Scheduler is loaded with the `?embed=1` URL parameter. The login screen is hidden entirely, and the app auto-switches to a read-only panel (Viewer or Dashboard) without requiring credentials. Designed for iframe embedding in the Masterlist dashboard's Schedule tab.
+
+When `?embed=1` is present:
+- Login screen is bypassed; no credentials required
+- App auto-selects Viewer or Dashboard panel based on `?panel=` param
+- Builder (editable) panel is never reachable
+- Sign Out topbar is hidden
+- All functionality is read-only (load-only, no save)
+
+Standalone mode (no `?embed=1`) is completely unchanged: Builder is default, login required, all save/edit features intact.
+
+### Reason
+
+Enables seamless iframe embedding of the Scheduler into the Masterlist dashboard without duplicate login UI or credential re-entry. Managers can view and interact with the schedule directly in the dashboard's Schedule tab without opening a separate window or logging in twice.
+
+### Files Affected
+
+- `scheduler.html` — Login bypass logic, panel auto-switch, CSS hide rules, auth gate modification
+- `scheduler-live.html` — Mirrored copy (local development only, byte-identical to scheduler.html)
+
+### Implementation Details
+
+**URL parameter parsing (top of main script block):**
+```javascript
+_embed = new URLSearchParams(location.search).has('embed')
+_panel = new URLSearchParams(location.search).get('panel')
+```
+
+**Login bypass in `_pbStartApp()` embed branch:**
+- When `_embed === true`, the function skips the login screen entirely
+- Calls `sw('v')` or `sw('d')` SYNCHRONOUSLY to switch panels before `loadData()`
+- Panel selection: `?panel=dashboard` → Dashboard; empty/missing/other → Viewer (default)
+- Panel switch is guaranteed even if subsequent data fetch fails
+
+**Auth gate in `loadData()`:**
+```javascript
+if(!_embed && !_pbGetAuthToken()) return;
+```
+Embed sessions render with no auth token (treated as pre-authenticated, read-only).
+
+**CSS `body.embed-mode` hide rules:**
+- `#login-scr` — hides login screen
+- `#p-b` — hides editable Builder panel (never reachable in embed mode)
+- `.lg-topbar-info` — hides Sign Out button
+- `.brand`, `.brand-sep` — hides logo/branding chrome
+
+### Usage Examples
+
+- Embed Viewer (default): `scheduler.html?embed=1` or `scheduler.html?embed=1&panel=viewer`
+- Embed Dashboard: `scheduler.html?embed=1&panel=dashboard`
+- Standalone (full UI, login required): `scheduler.html` (no `?embed=1`)
+
+### Impact
+
+- **Dashboard integration:** Scheduler can be embedded as a read-only iframe in the Masterlist Schedule tab
+- **Auth flow:** No credential re-entry needed for embedded sessions
+- **Security:** Builder panel is unreachable; embed sessions are read-only
+- **UX:** Seamless view switching without context loss or page reload
+- **Backward compatibility:** Non-embed mode (standalone) completely unchanged
+
+### Testing
+
+- [x] URL param `?embed=1` correctly parsed; `_embed` flag set
+- [x] `embed-mode` CSS class applied to `<body>` when `_embed === true`
+- [x] Login screen hidden; `#login-scr` not rendered
+- [x] Builder nav tab button hidden; not accessible in embed mode
+- [x] Sign Out button hidden; `.lg-topbar-info` not visible
+- [x] Branding/logo hidden; chrome minimized for iframe
+- [x] Auto-panel switch works: `?panel=viewer` loads Viewer; `?panel=dashboard` loads Dashboard
+- [x] Missing/empty `?panel=` param defaults to Viewer
+- [x] Invalid `?panel=` values gracefully default to Viewer (no error)
+- [x] `loadData()` renders without auth token; treats embed session as pre-authenticated
+- [x] All interactive features work in embed mode: filters, viewing, navigation
+- [x] Standalone mode (no params) unchanged: Builder default, login required, Save button visible, Sign Out visible
+- [x] Code review passed: senior-code-reviewer verdict PASS
+- [x] Page refresh in embed mode maintains embed-mode behavior
+
+### Notes / Risks
+
+**Implementation note — 2 rounds of development:**
+- Round 1: Basic panel switching and chrome hiding
+- Round 2: Fixed HIGH finding where embed without `?panel=` param exposed the editable Builder panel. Fixed by adding the Builder hide CSS rule and ensuring the panel switch happens before data load.
+
+**Non-blocking nit:** One redundant panel-switch line (~1708) noted by code reviewer; deferred to cosmetic cleanup pass.
+
+**Local POC status:** `scheduler.html` is not deployed to git. Changes remain local until/unless Scheduler moves to production deployment.
+
+**Iframe context:** Cross-origin embedding (different domain) may encounter CORS issues. Same-origin or proxy deployment recommended.
+
+**Session isolation:** Each embedded iframe maintains its own auth session. Multiple embedded instances do not share login/session state.
+
+**Read-only enforcement:** Embed mode relies on CSS hiding and auth-gate logic. A determined user can bypass via DevTools. For production, consider server-side enforcement of read-only mode on the Apps Script backend (optional enhancement).
+
+---
+
+## 2026-07-04 — GitHub Pages 404 Incident (Schedule Tab) — Fixed
+
+### Summary
+
+The live GitHub Pages dashboard's Schedule tab displayed a 404 error. Root cause: a locally-dirty (uncommitted) POC version of `dashboard.py` on disk had been built into the published HTML. The POC modified the Schedule tab iframe `src` from `scheduler-arch.html` (correct, exists on GitHub Pages) to `scheduler-live.html` (incorrect, does not exist), and added orphaned UI elements (`#scheduleSubNav`, `#btnViewer`, `#btnDashboard`) and a unused JS function (`switchScheduleView(panel)`). The committed source of `dashboard.py` was actually clean — the problem was local file dirtiness flowing into the published output.
+
+**Fix applied:** Reverted local POC edits, rebuilt from clean committed source, and re-synced published HTML. Commit 169a052 verified clean by senior-code-reviewer.
+
+### Reason
+
+Incident highlights a critical operational risk: automated scheduled builds (`update_coaching_dashboard_auto.bat`) can bake local file edits into the published HTML even when those edits were never committed to git. The POC code on disk was treated as authoritative at build time, bypassing source-control safety.
+
+### Files Affected
+
+- `masterlist_dashboard.html` — rebuilt from clean `dashboard.py` (commit 169a052)
+- `dashboard.py` — source code unchanged; local POC edits reverted before rebuild
+- Orphaned local artifacts (safe to remove): `scheduler-live.html`, `scheduler-public-config.js` (POC remnants, not referenced in committed source)
+
+### Impact
+
+- **Incident resolved:** Schedule tab now correctly loads `scheduler-arch.html` from GitHub Pages (no 404)
+- **iframe src:** `<iframe src="scheduler-arch.html" ... title="Scheduler System Architecture" loading="lazy">` — height calc(100vh - 120px)
+- **Zero orphaned UI:** `switchTab()` function intact; no dangling `switchScheduleView()`, `#scheduleSubNav`, `#btnViewer`, `#btnDashboard` references
+- **Published state:** Cache-busting meta tags and auto-reload/freshness schedule arrays untouched (no regression)
+
+### Testing
+
+- [x] Verified commit 169a052 pushed to main branch (a0e5b10..169a052)
+- [x] Schedule tab iframe renders correctly, loads scheduler-arch.html without 404
+- [x] `grep -r "scheduler-live" masterlist_dashboard.html` — zero matches (correct)
+- [x] `grep -r "switchScheduleView" masterlist_dashboard.html` — zero matches (correct)
+- [x] `grep -r "scheduleSubNav\|btnViewer\|btnDashboard" masterlist_dashboard.html` — zero matches (correct)
+- [x] `switchTab()` click handler still functional for all tabs (Coaching, Quality, Schedule, etc.)
+- [x] Cache-busting meta tags verified present in `<head>` (`Cache-Control`, `Pragma`, `Expires`)
+- [x] Auto-reload schedule array intact (same refresh times: 03:30, 06:30, 11:30, 15:30, 19:30, 22:30)
+- [x] Code review: senior-code-reviewer verdict PASS
+
+### Notes / Risks
+
+**Preventive action:** Never let a scheduled/automated pipeline build `masterlist_dashboard.html` from a locally-dirty `dashboard.py`. Before any scheduled run:
+1. Ensure `git status` shows no uncommitted changes in the Masterlist directory
+2. If local POC edits are on disk, either commit them or revert them before the scheduled build fires
+3. Consider adding a pre-build git-status check to both `update_coaching_dashboard_auto.bat` and `update_coaching_dashboard.bat` that aborts if `dashboard.py` is modified
+
+**Cleanup:** Local artifacts `scheduler-live.html` and `scheduler-public-config.js` (POC code from development) remain on disk but are not referenced. Safe to delete to free space.
+
+---
+
+## 2026-07-04 — Mobile Responsiveness for Architecture Diagram (scheduler-arch.html)
+
+**Status:** Implemented and reviewed (senior-code-reviewer PASS) — NOT YET COMMITTED
+
+### Summary
+
+Added mobile-friendly messaging to `scheduler-arch.html` to address the problem that decorative margin elements (Data Container/Pipeline/Processing icon stack, "Coming Soon" badge, and Development Lifecycle loop) were not visible on mobile phones. These elements are hidden below `@media (max-width: 1500px)` and further force-hidden by `layoutArch()` JS when insufficient horizontal room exists.
+
+Rather than cloning/stacking these elements on mobile (which would cause duplicate ID collisions — `archIconContainer`, `archDbGrad`, `archFunnelGrad`, `archFunnelClip`, `archDevGlow`, `archDevLoopPath`, `archDevDot`, `archDevDotMotion` are targeted by ID in `layoutArch()` and cannot be duplicated), added a new `.arch-mobile-note` message that displays on mobile and gracefully informs users to view on desktop for the full interactive diagram.
+
+### Reason
+
+Avoids JavaScript collision errors and ID duplication risk inherent in cloning complex animated SVG elements with fixed ID references. The informational message is additive, unobtrusive, and respects desktop layouts entirely (note is `display:none` above 768px viewport).
+
+### Files Affected
+
+- `scheduler-arch.html` (local-only, not in git per Scheduler project convention)
+
+### Changes Made
+
+**CSS (new, lines ~896–910):**
+```css
+@media (max-width: 768px) {
+  .arch-mobile-note {
+    display: block;
+    margin: 2rem 0;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: #f0f0f0;
+    color: var(--text-faint);
+    text-align: center;
+    font-size: 14px;
+  }
+}
+```
+
+**HTML (new, line ~1293, inside `.page` immediately after `.doc-footer`):**
+```html
+<p class="arch-mobile-note">View on desktop for the full interactive diagram with system data flow, development lifecycle, and technology stack.</p>
+```
+
+**CSS override for desktop (existing 1500px block untouched):**
+- `.arch-mobile-note` defaults to `display:none`
+- Only shown when viewport is ≤768px
+- Uses existing `var(--text-faint)` color token (defined line 20)
+
+### Impact
+
+- **Mobile experience:** Users on phones/tablets see a helpful message instead of a broken/incomplete diagram
+- **Desktop experience:** Completely unchanged; message is `display:none` at all viewport widths ≥768px
+- **No ID collisions:** Avoids attempting to duplicate complex SVG elements with fixed IDs
+- **Graceful degradation:** Preserves all existing JavaScript and CSS selectors; no changes to `layoutArch()` or animation logic
+
+### Testing
+
+- [x] Verified `.arch-mobile-note` hidden on desktop (1500px+ and 768px–1500px viewports) — `display:none`
+- [x] Verified message displays on mobile (<768px) with correct styling and color
+- [x] Verified no duplicate IDs in markup; existing element IDs unchanged
+- [x] Verified no changes to `layoutArch()` or animation keyframes
+- [x] No console errors on desktop or mobile
+- [x] Code review passed: senior-code-reviewer verdict PASS — desktop layout confirmed unaffected, no regressions
+- [x] Artifact preview republished and accessible
+
+### Notes / Risks
+
+- **Local-only:** `scheduler-arch.html` remains in local development; not pushed to git (pending Mike's approval)
+- **Message wording:** Informational tone encourages viewing on desktop without being dismissive of mobile users
+- **Accessibility:** Message uses standard `<p>` tag; readable by all screen readers; no `aria-hidden` applied
+- **Future enhancement:** Once Scheduler moves to production, this mobile message may be replaced with a responsive version of the full diagram (separate UX work)
+
+---
+
+## 2026-07-04 — Margin Decorations Re-anchored to Login Page Level (scheduler-arch.html)
+
+**Status:** Implemented and verified by senior-code-reviewer; published to preview artifact — NOT YET PUSHED TO GIT
+
+### Summary
+
+The Scheduler architecture diagram's two margin decoration elements ("Coming Soon" badge on the right and "Development Lifecycle" loop on the left) were re-anchored to align their TOP edges with the top of the `.login-card` element (near the top of the diagram) instead of floating independently above the icon stack. The "Coming Soon" badge was also enlarged by approximately 30% (width 240→312px, border 2→3px, padding and font adjustments). Horizontal placement (left/right margins) remained unchanged.
+
+### Reason
+
+Provides visual coherence by anchoring the decorative margin elements to a fixed reference point (the Login Page card) rather than to the icon stack below, which could shift unpredictably. The size increase improves visibility of the "Coming Soon" status and development lifecycle messaging. A min-clamp (8px) prevents elements from being positioned too close to the top viewport edge.
+
+### Files Affected
+
+- `scheduler-arch.html` (local-only, not in git per Scheduler project convention)
+
+### Changes Made
+
+#### Right Margin — "Coming Soon" Badge Enlargement and Re-anchor
+
+- **Size increase:** Width 240px → 312px; border 2px → 3px; radius 12px → 16px
+- **Padding adjustment:** 24/16/20 → 31/21/26 (top/horizontal/bottom)
+- **Title font size:** 20px → 26px (bolder emphasis)
+- **Subtitle font size:** 12px → 16px (improved readability)
+- **Progress bar height:** 6px → 8px
+- **Sparkle dots:** 5px → 7px
+- **Vertical anchor:** Moved from stacked above icon stack to align TOP edge with `.login-card` top + 8px min-clamp
+- **Horizontal position:** Unchanged (right margin)
+
+#### Left Margin — "Development Lifecycle" Loop Re-anchor
+
+- **Dimensions:** No change (remains ~240px)
+- **Vertical anchor:** Moved from independent positioning to align TOP edge with `.login-card` top + 8px min-clamp
+- **Horizontal position:** Unchanged (left margin)
+- **Animation:** Unaffected; SVG dot continues 8s loop cycle
+
+#### Implementation in `layoutArch()`
+
+- New logic queries `.login-card` reference once: `var loginR = document.querySelector('.login-card')?.getBoundingClientRect()`
+- Both `#archComingSoon` and `#archDevLoop` anchor their TOP positions to `Math.max(loginR.top, 8)` (8px minimum clamp from viewport top)
+- Safe null fallback: if `.login-card` is not found, elements fall back to default positioning
+- Anti-overlap guard retained: badge respects right-margin icon stack and clears it with `top:auto;bottom:...` if needed
+- Responsive hiding: both elements remain hidden below `@media (max-width: 1500px)`
+
+### Impact
+
+- **Visual hierarchy:** Margin decorations now clearly anchor to the diagram's "entry point" (Login Page card), providing visual structure
+- **Enhanced visibility:** Larger "Coming Soon" badge draws more attention to the development status announcement
+- **Layout robustness:** Fixed reference point prevents elements from drifting relative to other diagram components on resize
+- **No regression:** All existing animations, responsive rules, and motion-sensitivity guards remain intact
+
+### Testing
+
+- [x] `node --check` passed on inline JavaScript (no syntax errors)
+- [x] Visual diff verified: only the re-anchor and size changes present; no accidental modifications to other elements
+- [x] Vertical anchor works correctly: both margin elements align to `.login-card` top
+- [x] Min-clamp (8px) prevents elements from overlapping top viewport edge
+- [x] Anti-overlap guard functional: badge clears icon stack when needed
+- [x] Responsive hiding below 1500px viewport width unaffected
+- [x] SVG animation (dev-loop dot) continues uninterrupted
+- [x] All motion animations respect `prefers-reduced-motion` browser setting
+- [x] Code review passed: senior-code-reviewer verdict PASS — no regressions, scope limited to re-anchor and size changes
+
+### Notes / Risks
+
+- **Local-only POC:** `scheduler-arch.html` is not committed to git (Scheduler has no git deployment per project convention). Changes remain on disk; NOT yet pushed to GitHub Pages pending Mike's visual approval via artifact preview.
+- **Reference element robustness:** If `.login-card` is removed or hidden in a future diagram update, the fallback null-check ensures elements still render at default positions (no crash).
+- **Viewport edge safety:** The 8px min-clamp prevents margin decorations from colliding with top browser chrome on small viewports.
+- **Future updates:** Once Scheduler moves to production, the "Coming Soon" badge dimensions and placement should be re-evaluated as part of production launch (may need to hide the badge entirely when Scheduler is live).
+
+---
+
+## 2026-07-13 — Training Shift Type & Quarter-Hour Time Options
+
+**Status:** Completed and passed code review (senior-code-reviewer PASS) — feature implemented
+
+### Summary
+
+Two enhancements added to `scheduler.html`:
+
+1. **Three new shift time options** in `makeShiftOpts()` (~line 1009): quarter-hour options `01:15 → 09:15`, `01:30 → 09:30`, `01:45 → 09:45` injected between `01:00 → 09:00` and `02:00 → 10:00`. Same 8-hour duration and `HHMM-HHMM` value format as existing options; available in both Shift and Training time pickers.
+
+2. **New shift code "Training" (type code `tn`)** — behaves identically to Shift (`sh`) in all logic, with its own orange styling (bg `#FFEDD5`, border `#FDBA74`, text `#9A3412`, dot `#F97316`) and label "Training". Wired into: BTNS button array, scBg/scBd/scTx/scDot color maps, bStyle/bLbl/bLblV label maps, dayHrs() weekly hour totals, getStats() summary counts, grid cell rendering, expanded row editor (time + cross-trained account selectors, same as Shift), setShift() defaults (0800-1600), quickFill copy-Monday, Viewer "N on shift" pills (Team + Account tabs), Viewer per-account hour attribution, renderDash() (Training folds into the on-shift count bucket so all Dashboard KPIs/headcounts include it), dshDrillCell() sort/filter, CSS rules (.sbt.a-tn, .dot-tn, pulse-tn keyframes, .dsh-db.tn), and a new "Training" legend swatch. Deliberate exclusions (parity with Shift): the Mon-Fri quick-fill button stays Shift-only; no chip filter (Shift has none); no dashboard pip badge (Shift has none).
+
+**No Google Sheets / Apps Script change needed** — shift data round-trips as opaque JSON blobs (`{"t":"tn",...}`), the backend doesn't validate type codes. Embed mode (`?embed=1`) unaffected.
+
+### Reason
+
+Expands the Scheduler's shift scheduling capabilities to support training shifts as a distinct workload type separate from regular shifts. Quarter-hour time options provide finer-grained scheduling granularity for shifts that do not align to standard half-hour boundaries.
+
+### Files Affected
+
+- `scheduler.html` (only file)
+
+### Impact
+
+- **Scheduler grid:** Training shifts now render as orange cards alongside Shift (blue), RDOT (yellow), OT (purple), and other types
+- **Dashboard KPIs:** Training shifts are counted in the "On Shift" bucket for all on-shift metrics and headcount displays
+- **Viewer:** Training shifts included in Team/Account group "N on shift" counts and per-account hour attribution
+- **Time picker:** All time-based shift types (Shift, Training, RDOT, OT) now support quarter-hour options
+- **Save/load:** Training shifts persist to Google Sheet as `{"t":"tn","s":"HHmm","e":"HHmm","a":"Account"}`
+
+### Testing
+
+- [x] Three new quarter-hour time options render correctly in both Shift and Training time pickers
+- [x] Training shift type button appears in the inline row editor shift-type button array
+- [x] Training shifts render with correct orange styling: background `#FFEDD5`, border `#FDBA74`, text `#9A3412`, dot `#F97316`
+- [x] Training shifts included in dayHrs() and getStats() aggregations
+- [x] Dashboard KPI "On Shift" tile counts Training shifts (no separate Training bucket)
+- [x] Viewer group headers ("N on shift") include Training shifts
+- [x] Training shifts visible in Viewer per-account hour attribution
+- [x] quickFill copy-Monday preserves Training shift days (same as Shift)
+- [x] renderDash() drill-down (dshKpiDrill('onshift')) includes Training shifts in the roster
+- [x] Grid cell rendering, legend swatch, and CSS rules all function without errors
+- [x] Embed mode (`?embed=1`) unchanged
+- [x] Standalone mode (full UI) unchanged
+- [x] Code review passed: senior-code-reviewer verdict PASS — no bugs; non-blocking cosmetic note that the expanded row editor now has 8 type buttons and may wrap
+
+### Notes / Risks
+
+- **UI wrap:** The expanded row editor now displays 8 shift-type buttons (Shift, Training, Rest Day, VL, SL, RDOT, OT, Flexi). On narrow screens or small windows, the button row may wrap to a second line. This is a non-blocking cosmetic note; no functional impact.
+- **No backend validation:** The Google Apps Script backend accepts all JSON shift blobs without type-code validation. Training shifts will round-trip correctly as opaque data.
+- **Mon-Fri quick-fill Shift-only:** The Mon-Fri quick-fill button continues to create Shift (`sh`) entries, not Training. Users must manually set Training shifts day-by-day or use copy-Monday.
+- **Parity with Shift:** Training has no separate chip filter, no dashboard pip badge — it behaves as an on-shift variant, not a distinct filter category.
+
+### 2026-07-13 — CSS Polish: Row-Editor Button Spacing
+
+- **Shift-type button row spacing refined** — `.sbtns` gap 2px→3px and `.sbt` padding 3px 5px→3px 4px for uniform row+column spacing. Allows the 8-button editor row to wrap cleanly on narrow day columns. CSS-only, no behavior changes. Code review: PASS.
+
+---
+
+*Pac-Biz Operations — last updated 2026-07-13*
